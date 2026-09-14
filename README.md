@@ -1,5 +1,7 @@
 # PharmaIQ
 
+[![CI](https://github.com/abomed95/PharmaIQ/actions/workflows/ci.yml/badge.svg)](https://github.com/abomed95/PharmaIQ/actions/workflows/ci.yml)
+
 **Plateforme SaaS multi-pharmacies de gestion de stock, ventes et intelligence commerciale.**
 Chaque pharmacie a son espace privé ; la caisse encaisse en quelques secondes ; le stock se met à
 jour **en photographiant un reçu fournisseur** ; les alertes arrivent **sur WhatsApp** ; et les

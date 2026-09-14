@@ -9,6 +9,9 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     testTimeout: 30_000,
     hookTimeout: 60_000,
+    // En CI, les échecs sont republiés en annotations GitHub : ils apparaissent
+    // sur la ligne fautive, sans avoir à ouvrir les journaux du job.
+    reporters: process.env.GITHUB_ACTIONS ? ['default', 'github-actions'] : ['default'],
   },
   resolve: {
     alias: {
