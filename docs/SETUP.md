@@ -1,5 +1,11 @@
 # Installation et exploitation
 
+> **Sous Windows** : développer depuis **WSL2** (Ubuntu), pas depuis PowerShell.
+> Node 22 LTS + pnpm (via corepack) s'installent une fois pour toutes dans la
+> distribution. Un dossier monté sous `/mnt/c/...` fonctionne, mais l'install et
+> le build y sont nettement plus lents qu'un dossier placé dans le système de
+> fichiers Linux (`~/PharmaIQ`) — à envisager si l'attente devient gênante.
+
 ## 1. Base de données
 
 ### Option A — PostgreSQL local

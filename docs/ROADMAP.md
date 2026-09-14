@@ -60,7 +60,8 @@
 - **Migrations Prisma non versionnées** : le dépôt fournit le schéma et `db:push`. Générer la
   première migration (`pnpm db:migrate --name init`) avant la mise en production, pour disposer d'un
   historique reproductible.
-- **Lockfile absent** : à générer au premier `pnpm install`, puis committer.
+- ~~**Lockfile absent**~~ : `pnpm-lock.yaml` est versionné ; la CI installe en
+  `--frozen-lockfile`.
 - **Traductions partielles** : le français est complet ; somali, arabe et anglais couvrent la
   navigation et la caisse. Les clés manquantes retombent sur le français (jamais d'identifiant brut
   à l'écran).

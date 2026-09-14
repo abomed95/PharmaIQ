@@ -1,11 +1,30 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
+/**
+ * `useSearchParams()` force le rendu côté client : sans frontière Suspense,
+ * le pré-rendu de /login échoue à la compilation. Le formulaire est donc isolé
+ * dans un composant enfant.
+ */
 export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="card">
+          <p className="text-sm text-slate-500">Chargement…</p>
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
