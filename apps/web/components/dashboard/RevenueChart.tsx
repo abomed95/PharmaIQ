@@ -45,11 +45,12 @@ export function RevenueChart({ data, currency }: { data: SeriesPoint[]; currency
           />
           <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={56} />
           <Tooltip
-            formatter={(value: number, name: string) => [
-              `${Math.round(value)} ${currency}`,
+            // Types laissés à l'inférence : recharts attend des signatures larges.
+            formatter={(value, name) => [
+              `${Math.round(Number(value))} ${currency}`,
               name === 'revenue' ? 'Ventes' : 'Bénéfice',
             ]}
-            labelFormatter={(label: string) => `Jour ${label}`}
+            labelFormatter={(label) => `Jour ${String(label)}`}
           />
           <Area
             type="monotone"

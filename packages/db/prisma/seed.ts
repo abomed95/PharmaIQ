@@ -10,7 +10,16 @@
  */
 
 import { prismaAdmin } from '../src/admin';
-import { formatInvoiceNumber } from '../../core/src/invoice';
+
+/**
+ * Même format que `@pharmaiq/core` (`INV-202609-000042`), recopié ici pour que
+ * le paquet `db` ne dépende pas de `core` juste pour son jeu de démonstration.
+ */
+function demoInvoiceNumber(prefix: string, sequence: number, date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  return `${prefix}-${year}${month}-${String(sequence).padStart(6, '0')}`;
+}
 
 const DEMO_PRODUCTS = [
   { name: 'PARACETAMOL 500MG B/20', category: 'Médicaments', purchase: 180, selling: 300, qty: 120 },
@@ -155,7 +164,7 @@ async function createPharmacy(options: {
         data: {
           pharmacyId: pharmacy.id,
           branchId: branch.id,
-          invoiceId: formatInvoiceNumber('DEMO', sequence, date),
+          invoiceId: demoInvoiceNumber('DEMO', sequence, date),
           date,
           subtotal: grandTotal,
           grandTotal,

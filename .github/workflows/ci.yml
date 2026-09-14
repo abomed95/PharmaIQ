@@ -28,11 +28,22 @@ jobs:
       - name: Générer le client Prisma
         run: pnpm db:generate
 
+      # Les erreurs TypeScript sont republiées en annotations : elles
+      # apparaissent alors directement sur la ligne fautive dans la PR.
       - name: Vérification des types
-        run: pnpm typecheck
+        run: |
+          set +e
+          pnpm typecheck 2>&1 | tee typecheck.log
+          set -e
+          grep -E "error TS[0-9]+" typecheck.log | head -60 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+          ! grep -qE "error TS[0-9]+" typecheck.log
 
+      # Le test d'isolation se met de lui-même en pause sans DATABASE_URL :
+      # il est couvert par le job dédié ci-dessous.
       - name: Tests unitaires
-        run: pnpm vitest run --exclude tests/tenant-isolation.test.ts
+        run: pnpm test
 
   isolation:
     name: Isolation multi-tenant (RLS)
