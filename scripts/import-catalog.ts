@@ -59,8 +59,18 @@ async function readRows(path: string): Promise<Array<Record<string, string>>> {
 
   if (extname(absolute).toLowerCase() === '.xlsx') {
     try {
-      // Dépendance optionnelle : seuls les imports Excel en ont besoin.
-      const xlsx = (await import('xlsx')) as typeof import('xlsx');
+      // Dépendance OPTIONNELLE : le spécificateur passe par une variable pour
+      // que le projet compile sans que `xlsx` soit installé.
+      const moduleName: string = 'xlsx';
+      const xlsx = (await import(moduleName)) as {
+        readFile: (path: string) => {
+          SheetNames: string[];
+          Sheets: Record<string, unknown>;
+        };
+        utils: {
+          sheet_to_json: <T>(sheet: unknown, options?: Record<string, unknown>) => T[];
+        };
+      };
       const workbook = xlsx.readFile(absolute);
       const sheetName = workbook.SheetNames[0];
       if (!sheetName) throw new Error('classeur vide');
