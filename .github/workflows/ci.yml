@@ -44,6 +44,18 @@ jobs:
       - name: Tests unitaires
         run: pnpm test
 
+      # Certaines erreurs n'apparaissent qu'au build réel (pré-rendu, frontières
+      # Suspense, limites client/serveur) : ni le typage ni les tests ne les
+      # voient. Valeurs factices : rien n'est contacté à la compilation.
+      - name: Build de production
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pharmaiq
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/pharmaiq
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: anon-factice
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+        run: pnpm build
+
   isolation:
     name: Isolation multi-tenant (RLS)
     runs-on: ubuntu-latest
