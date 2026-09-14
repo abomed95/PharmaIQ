@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { NextRequest } from 'next/server';
-import { withTenant } from '@pharmaiq/db';
+import { Prisma, withTenant } from '@pharmaiq/db';
 import { parseAlertConfig } from '@pharmaiq/core';
 import { isValidPhone } from '@pharmaiq/whatsapp';
 import { ValidationError, handleRoute, jsonOk, parseBody } from '@/lib/http';
@@ -67,7 +67,7 @@ export const PATCH = handleRoute(async (request: NextRequest) => {
         ...(input.invoicePrefix !== undefined ? { invoicePrefix: input.invoicePrefix } : {}),
         ...(input.taxRate !== undefined ? { taxRate: input.taxRate } : {}),
         ...(input.phoneWhatsapp !== undefined ? { phoneWhatsapp: input.phoneWhatsapp } : {}),
-        ...(alertConfig ? { alertConfig } : {}),
+        ...(alertConfig ? { alertConfig: alertConfig as unknown as Prisma.InputJsonValue } : {}),
       },
       select: {
         name: true,

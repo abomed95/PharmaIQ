@@ -1,4 +1,4 @@
-import { prismaAdmin, withTenant, type TenantContext } from '@pharmaiq/db';
+import { Prisma, prismaAdmin, withTenant, type TenantContext } from '@pharmaiq/db';
 import { buildDigest, expiryTier, parseAlertConfig } from '@pharmaiq/core';
 import { readConfig, sendTemplate } from '@pharmaiq/whatsapp';
 import { getStockAlerts } from '../analytics';
@@ -183,7 +183,7 @@ export async function runStockAlerts(
               outOfStock: alerts.outOfStock.slice(0, 50),
               lowStock: alerts.lowStock.slice(0, 50),
               expiring: expiring.slice(0, 50),
-            },
+            } as unknown as Prisma.InputJsonValue,
             status: status === 'sent' ? 'sent' : status === 'failed' ? 'failed' : 'pending',
             error: error ?? null,
           },

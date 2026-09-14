@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { prismaAdmin, withTenant, type Role } from '@pharmaiq/db';
+import { Prisma, prismaAdmin, withTenant, type Role } from '@pharmaiq/db';
 import { DEFAULT_ALERT_CONFIG } from '@pharmaiq/core';
 import { ConflictError, NotFoundError, ValidationError } from '../http';
 import { createSupabaseAdminClient } from '../supabase/admin';
@@ -86,7 +86,7 @@ export async function signupPharmacy(input: SignupInput): Promise<SignupResult> 
         currency: input.currency,
         locale: input.locale,
         phoneWhatsapp: input.phoneWhatsapp ?? null,
-        alertConfig: { ...DEFAULT_ALERT_CONFIG },
+        alertConfig: { ...DEFAULT_ALERT_CONFIG } as unknown as Prisma.InputJsonValue,
       },
       select: { id: true },
     });

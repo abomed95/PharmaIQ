@@ -19,7 +19,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+          # Pas de `cache: pnpm` : il exige un pnpm-lock.yaml, qui n'est pas
+          # encore versionné. À réactiver dès que le lockfile est committé.
 
       - name: Installer les dépendances
         run: pnpm install --no-frozen-lockfile
@@ -67,7 +68,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
+          # Pas de `cache: pnpm` : il exige un pnpm-lock.yaml, qui n'est pas
+          # encore versionné. À réactiver dès que le lockfile est committé.
 
       - name: Installer les dépendances
         run: pnpm install --no-frozen-lockfile

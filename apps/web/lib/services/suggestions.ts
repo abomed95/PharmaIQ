@@ -1,4 +1,4 @@
-import { withTenant } from '@pharmaiq/db';
+import { Prisma, withTenant } from '@pharmaiq/db';
 import {
   buildSuggestions,
   groupBySupplier,
@@ -148,7 +148,12 @@ export async function persistSuggestions(
         productId: s.productId,
         period,
         priority: s.priority,
-        payload: { ...s.payload, name: s.name, reason: s.reason, supplierName: s.supplierName },
+        payload: {
+          ...s.payload,
+          name: s.name,
+          reason: s.reason,
+          supplierName: s.supplierName ?? null,
+        } as unknown as Prisma.InputJsonValue,
       })),
     });
     return created.count;

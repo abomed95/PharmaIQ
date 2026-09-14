@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { withTenant, type TenantTx } from '@pharmaiq/db';
+import { Prisma, withTenant, type TenantTx } from '@pharmaiq/db';
 import { round2 } from '@pharmaiq/core';
 import { NotFoundError } from '../http';
 import { toTenantContext, type SessionUser } from '../auth';
@@ -83,7 +83,8 @@ export async function confirmPurchase(
         receiptImageUrl: input.receiptImageUrl ?? null,
         aiExtracted: input.aiExtracted,
         aiConfidence: input.aiConfidence ?? null,
-        aiRaw: (input.aiRaw as object | undefined) ?? undefined,
+        // Sortie brute du modèle, conservée pour audit — forme non garantie.
+        aiRaw: (input.aiRaw ?? undefined) as Prisma.InputJsonValue | undefined,
         confirmedById: ctx.userId,
         confirmedAt: new Date(),
       },
