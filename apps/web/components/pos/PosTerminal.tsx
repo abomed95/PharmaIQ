@@ -224,11 +224,13 @@ export function PosTerminal({
       `TOTAL : ${money(receipt.grandTotal, currency, locale)} (${receipt.paymentMethod})`,
     ].join('\n');
 
-    if (typeof navigator !== 'undefined' && 'share' in navigator) {
-      await navigator.share({ title: receipt.invoiceId, text }).catch(() => undefined);
+    // Partage natif si le téléphone le propose, sinon copie dans le presse-papier.
+    const nav: Navigator | undefined = typeof navigator === 'undefined' ? undefined : navigator;
+    if (nav?.share) {
+      await nav.share({ title: receipt.invoiceId, text }).catch(() => undefined);
       return;
     }
-    await navigator.clipboard?.writeText(text).catch(() => undefined);
+    await nav?.clipboard?.writeText(text).catch(() => undefined);
   }
 
   return (

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { ZodError, type ZodSchema } from 'zod';
+import { ZodError, type TypeOf, type ZodTypeAny } from 'zod';
 import { ForbiddenError } from '@pharmaiq/core';
 import { TenantError } from '@pharmaiq/db';
 import { UnauthorizedError } from './auth';
@@ -41,8 +41,16 @@ export class ConflictError extends Error {
   }
 }
 
-/** Valide le corps JSON. Rejette tout champ inconnu si le schéma est strict. */
-export async function parseBody<T>(request: NextRequest, schema: ZodSchema<T>): Promise<T> {
+/**
+ * Valide le corps JSON. Rejette tout champ inconnu si le schéma est strict.
+ *
+ * Le type de retour est le type de SORTIE du schéma (`TypeOf`) : un champ avec
+ * `.default()` est optionnel à l'entrée mais garanti à la sortie.
+ */
+export async function parseBody<S extends ZodTypeAny>(
+  request: NextRequest,
+  schema: S,
+): Promise<TypeOf<S>> {
   let raw: unknown;
   try {
     raw = await request.json();
@@ -56,7 +64,7 @@ export async function parseBody<T>(request: NextRequest, schema: ZodSchema<T>): 
   return parsed.data;
 }
 
-export function parseQuery<T>(request: NextRequest, schema: ZodSchema<T>): T {
+export function parseQuery<S extends ZodTypeAny>(request: NextRequest, schema: S): TypeOf<S> {
   const params = Object.fromEntries(new URL(request.url).searchParams.entries());
   const parsed = schema.safeParse(params);
   if (!parsed.success) {

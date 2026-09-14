@@ -99,9 +99,23 @@ export const POST = handleRoute(async (request: NextRequest) => {
 
   const ctx = toTenantContext(user);
 
+  interface PreparedLine {
+    rawName: string;
+    quantity: number;
+    purchasePrice: number | null;
+    expiryDate: string | null;
+    batchNo: string | null;
+    knownPurchasePrice: number | null;
+    match: { productId: string; name: string; score: number; decision: string } | null;
+    decision: 'auto' | 'review' | 'new';
+    alternatives: Array<{ productId: string; name: string; score: number }>;
+    ok: boolean;
+    warning: string | null;
+  }
+
   const lines = await withTenant(ctx, async (tx) => {
     let fallback: MatchCandidate[] | null = null;
-    const out = [];
+    const out: PreparedLine[] = [];
 
     for (const item of extraction.receipt.items) {
       const found = await findCandidates(tx, ctx.pharmacyId, item.name, fallback);

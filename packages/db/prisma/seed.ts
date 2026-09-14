@@ -82,7 +82,13 @@ async function createPharmacy(options: {
     select: { id: true },
   });
 
-  const products = [];
+  const products: Array<{
+    id: string;
+    sellingPrice: unknown;
+    purchasePrice: unknown;
+    item: (typeof DEMO_PRODUCTS)[number];
+  }> = [];
+
   for (const item of DEMO_PRODUCTS) {
     const category = await prismaAdmin.category.upsert({
       where: { pharmacyId_name: { pharmacyId: pharmacy.id, name: item.category } },
