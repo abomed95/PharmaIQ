@@ -12,9 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # La version de pnpm vient du champ `packageManager` de package.json :
+      # la préciser ici aussi ferait échouer l'action (versions multiples).
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -60,9 +60,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # La version de pnpm vient du champ `packageManager` de package.json :
+      # la préciser ici aussi ferait échouer l'action (versions multiples).
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
