@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@pharmaiq/core": ["./packages/core/src/index.ts"],
+      "@pharmaiq/db": ["./packages/db/src/index.ts"],
+      "@pharmaiq/ai": ["./packages/ai/src/index.ts"],
+      "@pharmaiq/whatsapp": ["./packages/whatsapp/src/index.ts"]
+    }
+  },
+  "include": ["scripts/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "PharmaIQ — gestion de pharmacie",
+  "short_name": "PharmaIQ",
+  "description": "Stock, caisse et conseils d'achat pour pharmacies.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#059669",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Caisse", "url": "/pos" },
+    { "name": "Photo de reçu", "url": "/purchases/new" },
+    { "name": "Suggestions", "url": "/suggestions" }
+  ]
+}

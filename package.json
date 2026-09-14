@@ -9,7 +9,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
+    "typecheck": "turbo run typecheck && tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rls": "vitest run tests/tenant-isolation.test.ts",
@@ -22,6 +22,10 @@
     "format": "prettier --write \"**/*.{ts,tsx,md,json,sql}\""
   },
   "devDependencies": {
+    "@pharmaiq/ai": "workspace:*",
+    "@pharmaiq/core": "workspace:*",
+    "@pharmaiq/db": "workspace:*",
+    "@pharmaiq/whatsapp": "workspace:*",
     "@types/node": "^22.7.5",
     "dotenv": "^16.4.5",
     "prettier": "^3.3.3",

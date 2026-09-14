@@ -404,6 +404,9 @@ model Sale {
   branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
   invoiceId String
+  /// Clé d'idempotence envoyée par la caisse : si le réseau coupe et que
+  /// l'employé réessaie, la vente n'est pas enregistrée deux fois.
+  clientRef String?
   date      DateTime @default(now())
 
   subtotal   Decimal @default(0) @db.Decimal(12, 2)
@@ -430,6 +433,7 @@ model Sale {
   items SaleItem[]
 
   @@unique([pharmacyId, invoiceId])
+  @@unique([pharmacyId, clientRef])
   @@index([pharmacyId, date])
   @@index([pharmacyId, paymentMethod])
   @@index([pharmacyId, soldById])
