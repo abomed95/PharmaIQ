@@ -1,0 +1,17 @@
+{
+  "name": "@pharmaiq/whatsapp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Client WhatsApp Business Cloud API (Meta) pour les alertes stock et péremption.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

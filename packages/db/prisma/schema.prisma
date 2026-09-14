@@ -1,0 +1,546 @@
+// =============================================================================
+// PharmaIQ — schéma de données multi-tenant
+// -----------------------------------------------------------------------------
+// RÈGLE N°1 : toute table métier porte `pharmacyId`. La Row-Level Security
+// (prisma/rls.sql) applique l'isolation au niveau de la BASE, pas seulement du
+// code. `PurchaseItem` et `SaleItem` portent aussi `pharmacyId` (dénormalisation
+// assumée) pour que la politique RLS reste simple et sans jointure.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Enums
+// -----------------------------------------------------------------------------
+
+enum Role {
+  owner
+  admin
+  pharmacist
+  cashier
+  stock_manager
+}
+
+enum Plan {
+  trial
+  basic
+  pro
+}
+
+enum MovementType {
+  purchase
+  sale
+  adjustment
+  return
+  expiry
+  transfer
+}
+
+enum MovementSource {
+  manual
+  receipt_photo
+  pos
+  import
+  cron
+}
+
+enum SaleStatus {
+  completed
+  cancelled
+  refunded
+}
+
+enum PurchaseStatus {
+  draft
+  confirmed
+  cancelled
+}
+
+enum AlertType {
+  low_stock
+  out_of_stock
+  expiry
+  ai_insight
+}
+
+enum AlertChannel {
+  whatsapp
+  in_app
+  email
+}
+
+enum AlertStatus {
+  pending
+  sent
+  failed
+  skipped
+}
+
+enum RecoType {
+  buy_more
+  buy_less
+  dead_stock
+  price_suggestion
+  expiry_risk
+}
+
+// -----------------------------------------------------------------------------
+// Tenant racine
+// -----------------------------------------------------------------------------
+
+model Pharmacy {
+  id            String  @id @default(uuid()) @db.Uuid
+  name          String
+  slug          String  @unique
+  logoUrl       String?
+  country       String  @default("Djibouti")
+  city          String?
+  currency      String  @default("DJF")
+  locale        String  @default("fr") // fr | so | ar | en
+  timezone      String  @default("Africa/Djibouti")
+  phoneWhatsapp String?
+  invoicePrefix String  @default("INV")
+  taxRate       Decimal @default(0) @db.Decimal(5, 2) // % appliqué par défaut en caisse
+  plan          Plan    @default(trial)
+
+  /// Réglages des alertes : seuils de jours, heure d'envoi, activation par type.
+  /// Forme attendue : voir packages/core/src/alertConfig.ts
+  alertConfig Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches        Branch[]
+  users           User[]
+  invitations     Invitation[]
+  categories      Category[]
+  products        Product[]
+  stock           Stock[]
+  movements       StockMovement[]
+  suppliers       Supplier[]
+  purchases       Purchase[]
+  purchaseItems   PurchaseItem[]
+  sales           Sale[]
+  saleItems       SaleItem[]
+  customers       Customer[]
+  alerts          Alert[]
+  recommendations Recommendation[]
+  counters        Counter[]
+  auditLogs       AuditLog[]
+}
+
+model Branch {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  name       String
+  address    String?
+  phone      String?
+  isMain     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  users     User[]
+  stock     Stock[]
+  sales     Sale[]
+  movements StockMovement[]
+
+  @@unique([pharmacyId, name])
+  @@index([pharmacyId])
+}
+
+model User {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  branchId   String?  @db.Uuid
+  branch     Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  /// Identifiant Supabase Auth (auth.users.id). L'authentification et les mots
+  /// de passe sont gérés par Supabase — aucun hash n'est stocké ici.
+  authUserId String? @unique @db.Uuid
+
+  fullName  String
+  email     String
+  phone     String?
+  role      Role     @default(cashier)
+  locale    String?
+  isActive  Boolean  @default(true)
+  lastSeenAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales       Sale[]
+  movements   StockMovement[]
+  invitations Invitation[]  @relation("InvitedBy")
+  auditLogs   AuditLog[]
+
+  @@unique([pharmacyId, email])
+  @@index([pharmacyId])
+}
+
+model Invitation {
+  id          String   @id @default(uuid()) @db.Uuid
+  pharmacyId  String   @db.Uuid
+  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  email       String
+  role        Role     @default(cashier)
+  branchId    String?  @db.Uuid
+  /// Hash SHA-256 du token d'invitation (le token clair n'est jamais stocké).
+  tokenHash   String   @unique
+  invitedById String?  @db.Uuid
+  invitedBy   User?    @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([pharmacyId])
+  @@index([email])
+}
+
+// -----------------------------------------------------------------------------
+// Catalogue & stock
+// -----------------------------------------------------------------------------
+
+model Category {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  name       String
+  createdAt  DateTime @default(now())
+
+  products Product[]
+
+  @@unique([pharmacyId, name])
+  @@index([pharmacyId])
+}
+
+model Product {
+  id         String    @id @default(uuid()) @db.Uuid
+  pharmacyId String    @db.Uuid
+  pharmacy   Pharmacy  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  name       String
+  categoryId String?   @db.Uuid
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  barcode      String?
+  /// Dénomination Commune Internationale (molécule) — base de la substitution
+  /// générique et du rapprochement flou des reçus.
+  dci          String?
+  brand        String?
+  supplierName String?
+  /// Référence d'origine lors d'un import (ex. ProductID du fichier Shifa) —
+  /// permet un import idempotent.
+  externalRef  String?
+
+  purchasePrice Decimal @default(0) @db.Decimal(12, 2)
+  sellingPrice  Decimal @default(0) @db.Decimal(12, 2)
+  unit          String  @default("boîte")
+  reorderLevel  Int     @default(10)
+  isActive      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stock         Stock[]
+  saleItems     SaleItem[]
+  purchaseItems PurchaseItem[]
+  movements     StockMovement[]
+
+  @@unique([pharmacyId, name])
+  @@index([pharmacyId])
+  @@index([pharmacyId, isActive])
+  @@index([pharmacyId, externalRef])
+  @@index([barcode])
+}
+
+/// Stock par LOT (FEFO — First Expired First Out).
+model Stock {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  productId  String   @db.Uuid
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branchId   String   @db.Uuid
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  quantity      Int       @default(0)
+  batchNo       String?
+  expiryDate    DateTime? @db.Date
+  purchasePrice Decimal   @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pharmacyId])
+  @@index([pharmacyId, productId, branchId])
+  @@index([pharmacyId, expiryDate])
+  @@index([productId])
+}
+
+/// Journal immuable de TOUS les mouvements de stock (traçabilité / audit).
+model StockMovement {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  productId  String   @db.Uuid
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branchId   String   @db.Uuid
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  type          MovementType
+  source        MovementSource @default(manual)
+  /// Négatif = sortie, positif = entrée.
+  quantityDelta Int
+  batchNo       String?
+  expiryDate    DateTime?      @db.Date
+  unitPrice     Decimal?       @db.Decimal(12, 2)
+  reason        String?
+  /// Référence de la pièce d'origine (purchaseId, saleId…).
+  refType       String?
+  refId         String?        @db.Uuid
+
+  userId String? @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([pharmacyId, createdAt])
+  @@index([pharmacyId, productId, createdAt])
+  @@index([refType, refId])
+}
+
+// -----------------------------------------------------------------------------
+// Achats fournisseurs
+// -----------------------------------------------------------------------------
+
+model Supplier {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  name       String
+  phone      String?
+  email      String?
+  address    String?
+  /// Délai de livraison moyen en jours — entre dans le calcul du réappro.
+  leadTimeDays Int    @default(7)
+  createdAt  DateTime @default(now())
+
+  purchases Purchase[]
+
+  @@unique([pharmacyId, name])
+  @@index([pharmacyId])
+}
+
+model Purchase {
+  id         String    @id @default(uuid()) @db.Uuid
+  pharmacyId String    @db.Uuid
+  pharmacy   Pharmacy  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  supplierId String?   @db.Uuid
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  branchId   String?   @db.Uuid
+
+  invoiceRef String?
+  total      Decimal        @default(0) @db.Decimal(12, 2)
+  date       DateTime       @default(now())
+  status     PurchaseStatus @default(draft)
+
+  // --- Traçabilité de l'extraction IA ---------------------------------------
+  receiptImageUrl String?
+  aiExtracted     Boolean  @default(false)
+  aiConfidence    Decimal? @db.Decimal(4, 3)
+  /// Sortie brute du modèle, conservée pour audit et amélioration des prompts.
+  aiRaw           Json?
+  confirmedById   String?  @db.Uuid
+  confirmedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items PurchaseItem[]
+
+  @@index([pharmacyId, date])
+  @@index([pharmacyId, status])
+}
+
+model PurchaseItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  // Dénormalisé pour la RLS (pas de jointure dans la politique).
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  purchaseId String   @db.Uuid
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId  String   @db.Uuid
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  quantity      Int
+  purchasePrice Decimal   @db.Decimal(12, 2)
+  batchNo       String?
+  expiryDate    DateTime? @db.Date
+  /// Nom tel qu'écrit sur le reçu (avant rapprochement) — utile pour l'audit IA.
+  rawName       String?
+
+  @@index([pharmacyId])
+  @@index([purchaseId])
+  @@index([productId])
+}
+
+// -----------------------------------------------------------------------------
+// Ventes (détail ligne par ligne — indispensable aux conseils d'achat)
+// -----------------------------------------------------------------------------
+
+model Sale {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  branchId   String   @db.Uuid
+  branch     Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  invoiceId String
+  date      DateTime @default(now())
+
+  subtotal   Decimal @default(0) @db.Decimal(12, 2)
+  tax        Decimal @default(0) @db.Decimal(12, 2)
+  discount   Decimal @default(0) @db.Decimal(12, 2)
+  grandTotal Decimal @default(0) @db.Decimal(12, 2)
+  paid       Decimal @default(0) @db.Decimal(12, 2)
+  due        Decimal @default(0) @db.Decimal(12, 2)
+  change     Decimal @default(0) @db.Decimal(12, 2)
+  /// Coût d'achat total des lots servis — permet le bénéfice réel par vente.
+  costTotal  Decimal @default(0) @db.Decimal(12, 2)
+
+  paymentMethod String // Cash | Waafi | CAC pay | D money | Saba pay | banque
+  status        SaleStatus @default(completed)
+  note          String?
+
+  soldById   String?   @db.Uuid
+  soldBy     User?     @relation(fields: [soldById], references: [id], onDelete: SetNull)
+  customerId String?   @db.Uuid
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  items SaleItem[]
+
+  @@unique([pharmacyId, invoiceId])
+  @@index([pharmacyId, date])
+  @@index([pharmacyId, paymentMethod])
+  @@index([pharmacyId, soldById])
+}
+
+model SaleItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  // Dénormalisé pour la RLS.
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  saleId     String   @db.Uuid
+  sale       Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId  String   @db.Uuid
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+  discount  Decimal @default(0) @db.Decimal(12, 2)
+  lineTotal Decimal @db.Decimal(12, 2)
+  /// Coût d'achat unitaire du lot servi (FEFO) — marge réelle par ligne.
+  unitCost  Decimal @default(0) @db.Decimal(12, 2)
+  /// Date de vente recopiée : évite une jointure sur Sale dans les analyses.
+  soldAt    DateTime @default(now())
+
+  @@index([pharmacyId, soldAt])
+  @@index([pharmacyId, productId, soldAt])
+  @@index([saleId])
+}
+
+model Customer {
+  id            String   @id @default(uuid()) @db.Uuid
+  pharmacyId    String   @db.Uuid
+  pharmacy      Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  name          String
+  phone         String?
+  loyaltyPoints Int      @default(0)
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  sales Sale[]
+
+  @@index([pharmacyId])
+  @@index([pharmacyId, phone])
+}
+
+// -----------------------------------------------------------------------------
+// Alertes, recommandations, utilitaires
+// -----------------------------------------------------------------------------
+
+model Alert {
+  id         String       @id @default(uuid()) @db.Uuid
+  pharmacyId String       @db.Uuid
+  pharmacy   Pharmacy     @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  type       AlertType
+  channel    AlertChannel @default(whatsapp)
+  productId  String?      @db.Uuid
+  message    String
+  /// Détail structuré : produits concernés, quantités, jours avant péremption.
+  payload    Json?
+  status     AlertStatus  @default(pending)
+  error      String?
+  sentAt     DateTime     @default(now())
+
+  @@index([pharmacyId, sentAt])
+  @@index([pharmacyId, type, sentAt])
+}
+
+model Recommendation {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  type       RecoType
+  productId  String?  @db.Uuid
+  /// Détails : vitesse de vente, jours de couverture, quantité suggérée…
+  payload    Json
+  /// Période de calcul, ex. "2026-09".
+  period     String
+  priority   Int      @default(0)
+  actedOn    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([pharmacyId, createdAt])
+  @@index([pharmacyId, type, period])
+}
+
+/// Compteurs atomiques par tenant (numérotation des factures, etc.).
+model Counter {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  key        String // ex. "invoice:2026-09"
+  value      Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  @@unique([pharmacyId, key])
+  @@index([pharmacyId])
+}
+
+/// Journal d'audit des actions sensibles (rôles, prix, annulations, exports).
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  pharmacyId String   @db.Uuid
+  pharmacy   Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  userId     String?  @db.Uuid
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String // ex. "user.role_changed", "sale.cancelled"
+  entity     String?
+  entityId   String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([pharmacyId, createdAt])
+}

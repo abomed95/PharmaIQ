@@ -1,0 +1,43 @@
+# Dépendances
+node_modules/
+.pnpm-store/
+
+# Build
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Turbo
+.turbo/
+
+# Secrets — ne JAMAIS committer
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Prisma
+packages/db/prisma/*.db
+packages/db/prisma/generated/
+
+# Tests / couverture
+coverage/
+.vitest/
+
+# Uploads locaux (photos de reçus en dev)
+uploads/
+tmp/
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

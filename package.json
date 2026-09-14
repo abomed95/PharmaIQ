@@ -1,0 +1,33 @@
+{
+  "name": "pharmaiq",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PharmaIQ — SaaS multi-pharmacies de gestion de stock, ventes et intelligence commerciale.",
+  "packageManager": "pnpm@9.12.3",
+  "engines": { "node": ">=20.11" },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rls": "vitest run tests/tenant-isolation.test.ts",
+    "db:generate": "pnpm --filter @pharmaiq/db run generate",
+    "db:migrate": "pnpm --filter @pharmaiq/db run migrate",
+    "db:push": "pnpm --filter @pharmaiq/db run push",
+    "db:rls": "pnpm --filter @pharmaiq/db run rls",
+    "db:studio": "pnpm --filter @pharmaiq/db run studio",
+    "import:catalog": "tsx scripts/import-catalog.ts",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json,sql}\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "dotenv": "^16.4.5",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.1",
+    "turbo": "^2.1.3",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.3"
+  }
+}
