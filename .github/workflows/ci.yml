@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    name: Types & tests unitaires
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Générer le client Prisma
+        run: pnpm db:generate
+
+      - name: Vérification des types
+        run: pnpm typecheck
+
+      - name: Tests unitaires
+        run: pnpm vitest run --exclude tests/tenant-isolation.test.ts
+
+  isolation:
+    name: Isolation multi-tenant (RLS)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pharmaiq
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Migrations et amorçage : rôle propriétaire.
+      ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pharmaiq
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/pharmaiq
+      # Runtime applicatif : rôle SANS BYPASSRLS — c'est tout l'objet du test.
+      DATABASE_URL: postgresql://pharmaiq_app:pharmaiq_app@localhost:5432/pharmaiq
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Installer les dépendances
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Créer le rôle applicatif
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d pharmaiq -v ON_ERROR_STOP=1 -c \
+            "create role pharmaiq_app login password 'pharmaiq_app' nobypassrls;"
+
+      - name: Appliquer le schéma
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: pnpm db:push
+
+      - name: Activer la Row-Level Security
+        env:
+          DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
+        run: pnpm db:rls
+
+      - name: Test d'isolation
+        run: pnpm test:rls
