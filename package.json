@@ -17,6 +17,7 @@
     "db:migrate": "pnpm --filter @pharmaiq/db run migrate",
     "db:push": "pnpm --filter @pharmaiq/db run push",
     "db:rls": "pnpm --filter @pharmaiq/db run rls",
+    "db:seed": "pnpm --filter @pharmaiq/db run seed",
     "db:studio": "pnpm --filter @pharmaiq/db run studio",
     "import:catalog": "tsx scripts/import-catalog.ts",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,sql}\""
