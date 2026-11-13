@@ -2,6 +2,7 @@ import { Prisma, withTenant } from '@pharmaiq/db';
 import {
   buildSuggestions,
   groupBySupplier,
+  logger,
   periodKey,
   round2,
   type Suggestion,
@@ -108,7 +109,7 @@ export async function computeSuggestions(
         })),
       });
     } catch (error) {
-      console.error('[suggestions] explication IA indisponible', error);
+      logger.error('suggestions : explication IA indisponible', { pharmacyId: user.pharmacyId, error });
     }
   }
 

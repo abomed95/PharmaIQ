@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import { prismaAdmin, type TenantContext } from '@pharmaiq/db';
-import { assertCan, type Permission, type Role } from '@pharmaiq/core';
+import { assertCan, logger, type Permission, type Role } from '@pharmaiq/core';
 import { createSupabaseServerClient } from './supabase/server';
 
 /**
@@ -69,7 +69,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   // Défense en profondeur : le claim doit correspondre à la base.
   const claimed = (data.user.app_metadata as Record<string, unknown> | undefined)?.pharmacy_id;
   if (typeof claimed === 'string' && claimed !== dbUser.pharmacyId) {
-    console.error('[auth] claim pharmacy_id incohérent avec la base', {
+    logger.error('auth : claim pharmacy_id incohérent avec la base', {
       authUserId: data.user.id,
     });
     return null;

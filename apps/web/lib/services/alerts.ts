@@ -1,5 +1,5 @@
 import { Prisma, prismaAdmin, withTenant, type TenantContext } from '@pharmaiq/db';
-import { buildDigest, expiryTier, parseAlertConfig } from '@pharmaiq/core';
+import { buildDigest, expiryTier, logger, parseAlertConfig } from '@pharmaiq/core';
 import { readConfig, sendTemplate } from '@pharmaiq/whatsapp';
 import { getStockAlerts } from '../analytics';
 
@@ -198,7 +198,7 @@ export async function runStockAlerts(
         counts: digest.counts,
       });
     } catch (err) {
-      console.error('[alerts] échec pour la pharmacie', pharmacy.id, err);
+      logger.error('alertes : échec pour la pharmacie', { pharmacyId: pharmacy.id, error: err });
       outcomes.push({
         pharmacyId: pharmacy.id,
         pharmacyName: pharmacy.name,

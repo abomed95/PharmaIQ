@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { Prisma, prismaAdmin, withTenant, type Role } from '@pharmaiq/db';
-import { DEFAULT_ALERT_CONFIG } from '@pharmaiq/core';
+import { DEFAULT_ALERT_CONFIG, logger } from '@pharmaiq/core';
 import { ConflictError, NotFoundError, ValidationError } from '../http';
 import { createSupabaseAdminClient } from '../supabase/admin';
 import { toTenantContext, type SessionUser } from '../auth';
@@ -221,7 +221,7 @@ export async function inviteEmployee(user: SessionUser, input: InviteInput): Pro
     });
     emailSent = !error;
   } catch (error) {
-    console.warn('[invite] e-mail Supabase indisponible', error);
+    logger.warn('invitation : e-mail Supabase indisponible', { pharmacyId: ctx.pharmacyId, error });
   }
 
   return {
