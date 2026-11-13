@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rls": "vitest run tests/tenant-isolation.test.ts",
+    "test:db": "vitest run tests/tenant-isolation.test.ts tests/services.db.test.ts",
     "db:generate": "pnpm --filter @pharmaiq/db run generate",
     "db:migrate": "pnpm --filter @pharmaiq/db run migrate",
     "db:push": "pnpm --filter @pharmaiq/db run push",

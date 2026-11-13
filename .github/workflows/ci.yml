@@ -106,6 +106,9 @@ jobs:
           psql -h localhost -U postgres -d pharmaiq -v ON_ERROR_STOP=1 -c \
             "create role authenticated nologin; create role anon nologin;"
 
+      - name: Générer le client Prisma
+        run: pnpm db:generate
+
       - name: Appliquer le schéma
         env:
           DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
@@ -116,5 +119,7 @@ jobs:
           DATABASE_URL: ${{ env.ADMIN_DATABASE_URL }}
         run: pnpm db:rls
 
-      - name: Test d'isolation
-        run: pnpm test:rls
+      # Isolation entre pharmacies + chemins critiques caisse/achats, sur une
+      # vraie base : ni l'un ni l'autre ne se prouve avec un double.
+      - name: Tests sur base réelle (isolation, caisse, achats)
+        run: pnpm test:db
