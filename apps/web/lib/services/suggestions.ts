@@ -11,6 +11,7 @@ import {
 import { explainPurchaseAdvice, isAiConfigured, type Advice } from '@pharmaiq/ai';
 import { getDashboard, getProductStats } from '../analytics';
 import { toTenantContext, type SessionUser } from '../session';
+import { consumeAiQuota } from './aiQuota';
 
 /**
  * Conseils d'achat (§6.3).
@@ -78,6 +79,8 @@ export async function computeSuggestions(
       byType.dead_stock.reduce((sum, s) => sum + (s.payload.capitalTied ?? 0), 0),
     );
     try {
+      // Plafond dépassé : l'écran reste complet, seule l'explication manque.
+      await consumeAiQuota(user, 'advice');
       advice = await explainPurchaseAdvice({
         pharmacyName: user.pharmacyName,
         currency: user.currency,

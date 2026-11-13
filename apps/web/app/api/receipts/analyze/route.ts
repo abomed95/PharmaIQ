@@ -10,6 +10,7 @@ import {
 import { handleRoute, jsonError, jsonOk, parseBody } from '@/lib/http';
 import { requirePermission, toTenantContext } from '@/lib/auth';
 import { receiptAnalyzeSchema } from '@/lib/validation';
+import { consumeAiQuota } from '@/lib/services/aiQuota';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -83,6 +84,8 @@ export const POST = handleRoute(async (request: NextRequest) => {
   }
 
   const input = await parseBody(request, receiptAnalyzeSchema);
+
+  await consumeAiQuota(user, 'receipt');
 
   let extraction;
   try {
