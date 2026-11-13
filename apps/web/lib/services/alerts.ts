@@ -101,14 +101,17 @@ export async function runStockAlerts(
     try {
       // Un seul envoi par jour, même si le cron est rejoué.
       if (!options.force) {
-        const already = await prismaAdmin.alert.count({
-          where: {
-            pharmacyId: pharmacy.id,
-            channel: 'whatsapp',
-            status: 'sent',
-            sentAt: { gte: startOfDay(now) },
-          },
-        });
+        // Lecture par pharmacie : elle repart sous RLS, comme tout le reste.
+        const already = await withTenant(ctx, (tx) =>
+          tx.alert.count({
+            where: {
+              pharmacyId: pharmacy.id,
+              channel: 'whatsapp',
+              status: 'sent',
+              sentAt: { gte: startOfDay(now) },
+            },
+          }),
+        );
         if (already > 0) {
           outcomes.push({
             pharmacyId: pharmacy.id,
