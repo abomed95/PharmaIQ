@@ -35,6 +35,9 @@ export const GET = handleRoute(async (request: NextRequest) => {
         }
       : {}),
     ...(query.category ? { category: { name: query.category } } : {}),
+    // Filtré en base : appliqué après la pagination, il rendait des pages
+    // incomplètes et un total faux.
+    ...(query.inStock === '1' ? { stock: { some: { quantity: { gt: 0 } } } } : {}),
   };
 
   const result = await withTenant(ctx, async (tx) => {
@@ -88,8 +91,7 @@ export const GET = handleRoute(async (request: NextRequest) => {
     };
   });
 
-  const items = query.inStock === '1' ? result.items.filter((p) => p.quantity > 0) : result.items;
-  return jsonOk({ ...result, items });
+  return jsonOk(result);
 });
 
 /** Création d'un produit. La catégorie est créée à la volée si besoin. */
