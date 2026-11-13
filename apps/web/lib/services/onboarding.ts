@@ -169,6 +169,18 @@ export async function inviteEmployee(user: SessionUser, input: InviteInput): Pro
   });
   if (existing) throw new ConflictError('Cet e-mail est déjà rattaché à la pharmacie');
 
+  // Une succursale reçue du navigateur n'est retenue que si elle appartient à
+  // la pharmacie (les clés étrangères ne passent pas par la RLS).
+  if (input.branchId) {
+    const branch = await withTenant(ctx, (tx) =>
+      tx.branch.findFirst({
+        where: { id: input.branchId as string, pharmacyId: ctx.pharmacyId },
+        select: { id: true },
+      }),
+    );
+    if (!branch) throw new NotFoundError('Succursale inconnue dans cette pharmacie');
+  }
+
   const token = randomBytes(24).toString('base64url');
   const expiresAt = new Date(Date.now() + 7 * 86_400_000);
 
@@ -215,11 +227,20 @@ export async function inviteEmployee(user: SessionUser, input: InviteInput): Pro
   let emailSent = false;
   try {
     const supabase = createSupabaseAdminClient();
-    const { error } = await supabase.auth.admin.inviteUserByEmail(email, {
+    const { data, error } = await supabase.auth.admin.inviteUserByEmail(email, {
       data: { full_name: input.fullName.trim() },
       redirectTo: appUrl ? `${appUrl}/invite/${token}` : undefined,
     });
     emailSent = !error;
+
+    // L'envoi de l'e-mail CRÉE déjà le compte d'authentification. On garde son
+    // identifiant : à l'acceptation il faudra compléter ce compte, et non en
+    // créer un second (Supabase refuserait : « déjà enregistré »).
+    if (!error && data.user) {
+      await withTenant(ctx, (tx) =>
+        tx.user.update({ where: { id: invitation.id }, data: { authUserId: data.user.id } }),
+      );
+    }
   } catch (error) {
     logger.warn('invitation : e-mail Supabase indisponible', { pharmacyId: ctx.pharmacyId, error });
   }
@@ -260,18 +281,23 @@ export async function acceptInvitation(input: AcceptInviteInput): Promise<{ phar
 
   const pending = await prismaAdmin.user.findFirst({
     where: { pharmacyId: invitation.pharmacyId, email: invitation.email },
-    select: { id: true, fullName: true },
+    select: { id: true, fullName: true, authUserId: true },
   });
   if (!pending) throw new NotFoundError('Utilisateur invité introuvable');
 
   const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase.auth.admin.createUser({
-    email: invitation.email,
+  const account = {
     password: input.password,
     email_confirm: true,
     user_metadata: { full_name: input.fullName ?? pending.fullName },
     app_metadata: { pharmacy_id: invitation.pharmacyId, role: invitation.role },
-  });
+  };
+
+  // Si l'e-mail d'invitation est parti, le compte existe déjà (sans mot de
+  // passe ni tenant) : on le complète. Sinon on le crée.
+  const { data, error } = pending.authUserId
+    ? await supabase.auth.admin.updateUserById(pending.authUserId, account)
+    : await supabase.auth.admin.createUser({ email: invitation.email, ...account });
 
   if (error || !data.user) {
     throw new ConflictError(error?.message ?? 'Création du compte impossible');
