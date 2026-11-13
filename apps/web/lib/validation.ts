@@ -119,6 +119,8 @@ export const purchaseConfirmSchema = z
     aiConfidence: z.coerce.number().min(0).max(1).optional().nullable(),
     aiRaw: z.unknown().optional(),
     items: z.array(purchaseConfirmItemSchema).min(1).max(300),
+    /** Clé d'idempotence : évite la double entrée en stock si le réseau coupe. */
+    clientRef: z.string().trim().min(6).max(80).optional(),
   })
   .strict();
 
