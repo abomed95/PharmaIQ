@@ -7,6 +7,7 @@ import {
   counterKey,
   formatInvoiceNumber,
   isPaymentMethod,
+  isPriceOverride,
   lineTotal,
   marginRate,
   round2,
@@ -105,5 +106,18 @@ describe('permissions par rôle', () => {
     for (const permissions of Object.values(ROLE_PERMISSIONS)) {
       expect(new Set(permissions).size).toBe(permissions.length);
     }
+  });
+});
+
+describe('écart de prix en caisse', () => {
+  it('ne signale rien quand le prix encaissé est celui du catalogue', () => {
+    expect(isPriceOverride(1200, 1200)).toBe(false);
+    // Un écart inférieur au centime est du bruit de flottant, pas une remise.
+    expect(isPriceOverride(0.1 + 0.2, 0.3)).toBe(false);
+  });
+
+  it('signale un prix modifié, à la baisse comme à la hausse', () => {
+    expect(isPriceOverride(1200, 0)).toBe(true);
+    expect(isPriceOverride(1200, 1500)).toBe(true);
   });
 });

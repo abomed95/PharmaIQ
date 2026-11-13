@@ -85,6 +85,17 @@ export function lineTotal(line: CartLine): number {
 }
 
 /** Monnaie à rendre (jamais négative). */
+/**
+ * Vrai si le prix encaissé diffère du prix catalogue.
+ *
+ * La caisse autorise un prix négocié au comptoir, mais l'écart doit laisser une
+ * trace : sans elle, une vente à prix cassé est indiscernable d'une vente
+ * normale dans les rapports.
+ */
+export function isPriceOverride(catalogPrice: number, chargedPrice: number): boolean {
+  return round2(catalogPrice) !== round2(chargedPrice);
+}
+
 export function computeChange(grandTotal: number, paid: number): { change: number; due: number } {
   const diff = round2(paid - grandTotal);
   return diff >= 0 ? { change: diff, due: 0 } : { change: 0, due: round2(-diff) };

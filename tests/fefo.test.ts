@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocateFefo, daysUntil, sortFefo, weightedUnitCost } from '@pharmaiq/core';
+import { allocateFefo, daysUntil, sellableLots, sortFefo, weightedUnitCost } from '@pharmaiq/core';
 
 const lot = (id: string, quantity: number, expiry: string | null, price = 100) => ({
   id,
@@ -59,5 +59,28 @@ describe('FEFO', () => {
     expect(daysUntil(new Date('2026-09-21T00:00:00Z'), from)).toBe(7);
     expect(daysUntil(new Date('2026-09-01T00:00:00Z'), from)).toBe(-13);
     expect(daysUntil(null, from)).toBeNull();
+  });
+});
+
+describe('lots vendables', () => {
+  const today = new Date('2026-11-13T09:00:00Z');
+
+  it('écarte un lot périmé', () => {
+    const lots = [lot('perime', 10, '2026-11-12'), lot('bon', 10, '2027-01-01')];
+    expect(sellableLots(lots, today).map((l) => l.id)).toEqual(['bon']);
+  });
+
+  it('garde un lot qui périme aujourd’hui et un lot sans date', () => {
+    const lots = [lot('jour', 5, '2026-11-13'), lot('sans-date', 5, null)];
+    expect(sellableLots(lots, today).map((l) => l.id)).toEqual(['jour', 'sans-date']);
+  });
+
+  it('empêche FEFO de servir le périmé en premier', () => {
+    const lots = [lot('perime', 10, '2026-01-01'), lot('bon', 4, '2027-01-01')];
+    const result = allocateFefo(sellableLots(lots, today), 6);
+
+    expect(result.allocations.map((a) => a.lotId)).toEqual(['bon']);
+    // Le stock périmé ne compte pas : la vente doit être refusée pour 2 unités.
+    expect(result.shortage).toBe(2);
   });
 });

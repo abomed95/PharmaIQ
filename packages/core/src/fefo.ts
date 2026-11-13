@@ -97,3 +97,20 @@ export function isExpired(date: Date | null, from: Date = new Date()): boolean {
   const d = daysUntil(date, from);
   return d !== null && d < 0;
 }
+
+/**
+ * Lots qu'on a le droit de VENDRE : tout sauf le périmé.
+ *
+ * FEFO sert d'abord la péremption la plus proche ; sans ce filtre, le lot déjà
+ * périmé est justement le premier servi au patient. Un lot qui périme
+ * aujourd'hui reste vendable (la date imprimée est incluse).
+ *
+ * Réservé à la vente : un ajustement « péremption » ou « casse » doit, lui,
+ * pouvoir sortir un lot périmé du stock.
+ */
+export function sellableLots<T extends { expiryDate: Date | null }>(
+  lots: T[],
+  today: Date = new Date(),
+): T[] {
+  return lots.filter((lot) => !isExpired(lot.expiryDate, today));
+}
