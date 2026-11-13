@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { ZodError, type TypeOf, type ZodTypeAny } from 'zod';
-import { ForbiddenError } from '@pharmaiq/core';
-import { TenantError } from '@pharmaiq/db';
+import { ForbiddenError, logger } from '@pharmaiq/core';
+import { Prisma, TenantError } from '@pharmaiq/db';
 import { UnauthorizedError } from './auth';
 
 /** Réponses JSON homogènes + traduction des erreurs métier en codes HTTP. */
@@ -74,6 +74,25 @@ export function parseQuery<S extends ZodTypeAny>(request: NextRequest, schema: S
 }
 
 /**
+ * Erreurs Prisma qui traduisent une faute de l'appelant, pas une panne : sans
+ * cette traduction, un doublon de nom ou un identifiant mal formé sortait en
+ * 500 et polluait les journaux d'erreurs.
+ */
+function prismaErrorResponse(error: unknown): NextResponse | null {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    // Contrainte d'unicité (nom de produit, clé d'idempotence…).
+    if (error.code === 'P2002') return jsonError('Cet élément existe déjà', 409);
+    // Enregistrement visé absent (ou invisible pour ce tenant).
+    if (error.code === 'P2025') return jsonError('Introuvable', 404);
+    // Référence vers un enregistrement inexistant.
+    if (error.code === 'P2003') return jsonError('Référence invalide', 400);
+    // Identifiant mal formé (UUID attendu).
+    if (error.code === 'P2023') return jsonError('Identifiant invalide', 400);
+  }
+  return null;
+}
+
+/**
  * `params` est volontairement laissé souple : Next génère un type de contexte
  * différent pour une route statique et pour une route dynamique, et l'enveloppe
  * doit convenir aux deux.
@@ -104,7 +123,14 @@ export function handleRoute(handler: RouteHandler): RouteHandler {
       }
       if (error instanceof TenantError) return jsonError(error.message, 400);
 
-      console.error('[api] erreur non gérée', error);
+      const known = prismaErrorResponse(error);
+      if (known) return known;
+
+      logger.error('api : erreur non gérée', {
+        method: request.method,
+        path: new URL(request.url).pathname,
+        error,
+      });
       return jsonError('Erreur interne', 500);
     }
   };

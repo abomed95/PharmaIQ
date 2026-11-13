@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { withTenant } from '@pharmaiq/db';
+import { assertUuid, withTenant } from '@pharmaiq/db';
 import { NotFoundError, handleRoute, jsonOk, parseBody } from '@/lib/http';
 import { requirePermission, toTenantContext } from '@/lib/auth';
 import { productCreateSchema } from '@/lib/validation';
@@ -14,7 +14,8 @@ export const PATCH = handleRoute(async (request: NextRequest, context) => {
   const user = await requirePermission('products.manage');
   const input = await parseBody(request, updateSchema);
   const ctx = toTenantContext(user);
-  const productId = context.params.id;
+  // Un identifiant mal formé doit donner un 400, pas une erreur de requête SQL.
+  const productId = assertUuid(context.params.id, 'Identifiant de produit');
 
   const updated = await withTenant(ctx, async (tx) => {
     const existing = await tx.product.findFirst({
