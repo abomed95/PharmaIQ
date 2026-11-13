@@ -40,6 +40,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): WhatsAppConfig
   };
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 function endpoint(config: WhatsAppConfig): string {
   return `https://graph.facebook.com/${config.apiVersion}/${config.phoneNumberId}/messages`;
 }
@@ -58,6 +60,8 @@ async function post(config: WhatsAppConfig, payload: unknown, to: string): Promi
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+      // Sans délai, une API Meta muette bloquerait tout le job d'alertes.
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     const body = (await response.json().catch(() => ({}))) as {
