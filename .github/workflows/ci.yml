@@ -101,6 +101,10 @@ jobs:
         run: |
           psql -h localhost -U postgres -d pharmaiq -v ON_ERROR_STOP=1 -c \
             "create role pharmaiq_app login password 'pharmaiq_app' nobypassrls;"
+          # Rôles PostgREST de Supabase : absents d'un PostgreSQL nu, créés ici
+          # pour que le test vérifie réellement qu'ils n'ont aucun droit.
+          psql -h localhost -U postgres -d pharmaiq -v ON_ERROR_STOP=1 -c \
+            "create role authenticated nologin; create role anon nologin;"
 
       - name: Appliquer le schéma
         env:
