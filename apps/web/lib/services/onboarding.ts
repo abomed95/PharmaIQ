@@ -4,7 +4,7 @@ import { Prisma, prismaAdmin, withTenant, type Role } from '@pharmaiq/db';
 import { DEFAULT_ALERT_CONFIG, logger } from '@pharmaiq/core';
 import { ConflictError, NotFoundError, ValidationError } from '../http';
 import { createSupabaseAdminClient } from '../supabase/admin';
-import { toTenantContext, type SessionUser } from '../auth';
+import { toTenantContext, type SessionUser } from '../session';
 import { inviteSchema, signupPharmacySchema } from '../validation';
 
 /**

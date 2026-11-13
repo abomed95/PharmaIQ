@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { ZodError, type TypeOf, type ZodTypeAny } from 'zod';
 import { ForbiddenError, logger } from '@pharmaiq/core';
 import { Prisma, TenantError } from '@pharmaiq/db';
-import { UnauthorizedError } from './auth';
+import { UnauthorizedError } from './session';
 
 /** Réponses JSON homogènes + traduction des erreurs métier en codes HTTP. */
 

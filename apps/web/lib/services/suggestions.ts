@@ -10,7 +10,7 @@ import {
 } from '@pharmaiq/core';
 import { explainPurchaseAdvice, isAiConfigured, type Advice } from '@pharmaiq/ai';
 import { getDashboard, getProductStats } from '../analytics';
-import { toTenantContext, type SessionUser } from '../auth';
+import { toTenantContext, type SessionUser } from '../session';
 
 /**
  * Conseils d'achat (§6.3).

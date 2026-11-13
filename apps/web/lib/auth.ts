@@ -1,7 +1,11 @@
 import { cache } from 'react';
-import { prismaAdmin, type TenantContext } from '@pharmaiq/db';
+import { prismaAdmin } from '@pharmaiq/db';
 import { assertCan, logger, type Permission, type Role } from '@pharmaiq/core';
 import { createSupabaseServerClient } from './supabase/server';
+import { UnauthorizedError, type SessionUser } from './session';
+
+// Réexportés : les routes et les pages n'ont qu'un module d'auth à connaître.
+export { UnauthorizedError, toTenantContext, type SessionUser } from './session';
 
 /**
  * Résolution du tenant — LE point de sécurité de l'application.
@@ -10,23 +14,6 @@ import { createSupabaseServerClient } from './supabase/server';
  * l'identifiant Supabase vérifié. Il n'est jamais accepté depuis le client
  * (corps de requête, query string, en-tête).
  */
-
-export class UnauthorizedError extends Error {
-  constructor(message = 'Authentification requise') {
-    super(message);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-export interface SessionUser extends TenantContext {
-  fullName: string;
-  pharmacyName: string;
-  pharmacySlug: string;
-  currency: string;
-  locale: string;
-  invoicePrefix: string;
-  taxRate: number;
-}
 
 /**
  * `cache()` dédoublonne l'appel pendant un même rendu : la même requête
@@ -103,15 +90,4 @@ export async function requirePermission(permission: Permission): Promise<Session
   const user = await requireSession();
   assertCan(user.role, permission);
   return user;
-}
-
-/** Contexte tenant nu, à passer à `withTenant()`. */
-export function toTenantContext(user: SessionUser): TenantContext {
-  return {
-    pharmacyId: user.pharmacyId,
-    userId: user.userId,
-    role: user.role,
-    branchId: user.branchId,
-    email: user.email,
-  };
 }
