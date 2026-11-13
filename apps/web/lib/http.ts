@@ -93,12 +93,12 @@ function prismaErrorResponse(error: unknown): NextResponse | null {
 }
 
 /**
- * `params` est volontairement laissé souple : Next génère un type de contexte
+ * `params` est une promesse depuis Next 15. Son contenu est volontairement laissé souple : Next génère un type de contexte
  * différent pour une route statique et pour une route dynamique, et l'enveloppe
  * doit convenir aux deux.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RouteHandler = (request: NextRequest, context: { params: any }) => Promise<Response>;
+type RouteHandler = (request: NextRequest, context: { params: Promise<any> }) => Promise<Response>;
 
 /**
  * Enveloppe chaque route : une erreur métier devient un code HTTP propre, et

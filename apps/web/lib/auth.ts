@@ -20,7 +20,7 @@ export { UnauthorizedError, toTenantContext, type SessionUser } from './session'
  * n'interroge la base qu'une fois, même si dix composants la demandent.
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   // getUser() revalide le JWT auprès de Supabase — plus sûr que getSession().
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return null;

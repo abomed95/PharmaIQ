@@ -6,8 +6,9 @@ import { cookies } from 'next/headers';
  * Ne jamais lui faire confiance pour le `pharmacy_id` : celui-ci est relu en
  * base (voir lib/auth.ts).
  */
-export function createSupabaseServerClient() {
-  const cookieStore = cookies();
+export async function createSupabaseServerClient() {
+  // Depuis Next 15, l'accès aux cookies de la requête est asynchrone.
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',

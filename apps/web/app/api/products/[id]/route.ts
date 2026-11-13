@@ -15,7 +15,7 @@ export const PATCH = handleRoute(async (request: NextRequest, context) => {
   const input = await parseBody(request, updateSchema);
   const ctx = toTenantContext(user);
   // Un identifiant mal formé doit donner un 400, pas une erreur de requête SQL.
-  const productId = assertUuid(context.params.id, 'Identifiant de produit');
+  const productId = assertUuid((await context.params).id, 'Identifiant de produit');
 
   const updated = await withTenant(ctx, async (tx) => {
     const existing = await tx.product.findFirst({

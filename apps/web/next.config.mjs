@@ -3,9 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   // Les packages du monorepo sont consommés en TypeScript source.
   transpilePackages: ['@pharmaiq/db', '@pharmaiq/core', '@pharmaiq/ai', '@pharmaiq/whatsapp'],
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client', '@anthropic-ai/sdk'],
-  },
+  serverExternalPackages: ['@prisma/client', '@anthropic-ai/sdk'],
   async headers() {
     return [
       {

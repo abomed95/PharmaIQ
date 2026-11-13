@@ -13,7 +13,7 @@ const schema = z.object({ reason: z.string().trim().min(3).max(200) }).strict();
 /** Annulation d'une vente : le stock retourne dans ses lots d'origine. */
 export const POST = handleRoute(async (request: NextRequest, context) => {
   const user = await requirePermission('sales.cancel');
-  const saleId = assertUuid(context.params.id, 'Identifiant de vente');
+  const saleId = assertUuid((await context.params).id, 'Identifiant de vente');
   const input = await parseBody(request, schema);
   await cancelSale(user, saleId, input.reason);
   return jsonOk({ id: saleId, status: 'cancelled' });

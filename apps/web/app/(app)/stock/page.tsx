@@ -9,10 +9,12 @@ import { Badge, EmptyState, PageHeader } from '@/components/ui';
 export const dynamic = 'force-dynamic';
 
 export default async function StockPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { q?: string; expiring?: string };
+  searchParams: Promise<{ q?: string; expiring?: string }>;
 }) {
+  // Depuis Next 15, les paramètres d'URL arrivent sous forme de promesse.
+  const searchParams = await searchParamsPromise;
   const user = await requirePermission('stock.view');
   const dict = getDictionary(user.locale);
   const onlyExpiring = searchParams.expiring === '1';

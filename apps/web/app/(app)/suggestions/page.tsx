@@ -16,10 +16,12 @@ const TABS: Array<{ key: SuggestionType; labelKey: 'buyMore' | 'deadStock' | 'ex
 ];
 
 export default async function SuggestionsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { tab?: string; days?: string; explain?: string };
+  searchParams: Promise<{ tab?: string; days?: string; explain?: string }>;
 }) {
+  // Depuis Next 15, les paramètres d'URL arrivent sous forme de promesse.
+  const searchParams = await searchParamsPromise;
   const user = await requirePermission('suggestions.view');
   const dict = getDictionary(user.locale);
 

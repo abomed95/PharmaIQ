@@ -6,7 +6,9 @@ import { EmptyState, PageHeader } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
-export default async function CustomersPage({ searchParams }: { searchParams: { q?: string } }) {
+export default async function CustomersPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ q?: string }> }) {
+  // Depuis Next 15, les paramètres d'URL arrivent sous forme de promesse.
+  const searchParams = await searchParamsPromise;
   const user = await requirePermission('customers.manage');
   const dict = getDictionary(user.locale);
   const ctx = toTenantContext(user);
