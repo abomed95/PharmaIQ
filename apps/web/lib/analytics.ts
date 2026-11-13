@@ -49,6 +49,9 @@ export async function getProductStats(
                sum(si."lineTotal")::float   as revenue,
                max(si."soldAt")             as last_sale
         from "SaleItem" si
+        -- Une vente annulée a rendu son stock : la compter gonflerait la
+        -- vitesse de vente, donc les quantités à commander.
+        join "Sale" vente on vente.id = si."saleId" and vente.status::text = 'completed'
         where si."pharmacyId" = ${ctx.pharmacyId}::uuid
           and si."soldAt" >= now() - ${days(periodDays)}
         group by si."productId"
@@ -254,6 +257,7 @@ export async function getDashboard(
              sum(si."lineTotal" - si."unitCost" * si.quantity)::float        as "profit"
       from "SaleItem" si
       join "Product" p on p.id = si."productId"
+      join "Sale" vente on vente.id = si."saleId" and vente.status::text = 'completed'
       where si."pharmacyId" = ${ctx.pharmacyId}::uuid
         and si."soldAt" >= now() - ${days(windowDays)}
       group by si."productId", p.name
