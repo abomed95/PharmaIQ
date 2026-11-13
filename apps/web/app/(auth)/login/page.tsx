@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { safeRedirectPath } from '@pharmaiq/core';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 /**
@@ -46,7 +47,8 @@ function LoginForm() {
       return;
     }
 
-    router.push(searchParams.get('next') ?? '/dashboard');
+    // `next` vient de l'URL : on n'y suit qu'un chemin interne.
+    router.push(safeRedirectPath(searchParams.get('next')));
     router.refresh();
   }
 
