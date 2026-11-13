@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma, prismaAdmin } from '@pharmaiq/db';
-import { getProductStats } from '../apps/web/lib/analytics';
+import { getDashboard, getProductStats } from '../apps/web/lib/analytics';
 import type { SessionUser } from '../apps/web/lib/session';
 import { confirmPurchase } from '../apps/web/lib/services/purchases';
 import { cancelSale, createSale } from '../apps/web/lib/services/sales';
@@ -182,6 +182,35 @@ describe.skipIf(!hasDatabase)('services caisse et achats (PostgreSQL)', () => {
     const units = (stats: typeof before) => stats.find((s) => s.productId === productId)?.unitsSold ?? 0;
     expect(units(during)).toBe(units(before) + 2);
     expect(units(after)).toBe(units(before));
+  });
+
+  it('compte « aujourd’hui » dans le fuseau de la pharmacie, pas dans celui de la base', async () => {
+    await prismaAdmin.stock.create({
+      data: { pharmacyId, productId, branchId, quantity: 1, batchNo: 'FUSEAU', expiryDate: nextYear, purchasePrice: 100 },
+    });
+    const sale = await createSale(user, cart(1));
+    // Vente passée il y a cinq heures.
+    await prismaAdmin.sale.update({
+      where: { id: sale.id },
+      data: { date: new Date(Date.now() - 5 * 3_600_000) },
+    });
+
+    // Fuseau où il est environ 2 h du matin : la vente date donc d'hier soir.
+    let offset = 2 - new Date().getUTCHours();
+    if (offset < -12) offset += 24;
+    // Convention POSIX des noms Etc/GMT : le signe est inversé.
+    const earlyMorning = `Etc/GMT${offset > 0 ? '-' : '+'}${Math.abs(offset)}`;
+    // Fuseau où il est environ 23 h : cinq heures plus tôt, c'était le même jour.
+    let lateOffset = 23 - new Date().getUTCHours();
+    if (lateOffset > 14) lateOffset -= 24;
+    const lateEvening = `Etc/GMT${lateOffset > 0 ? '-' : '+'}${Math.abs(lateOffset)}`;
+
+    const morning = await getDashboard(user, { windowDays: 30, timeZone: earlyMorning });
+    const evening = await getDashboard(user, { windowDays: 30, timeZone: lateEvening });
+
+    expect(evening.today.salesCount - morning.today.salesCount).toBe(1);
+    // Fenêtre glissante : indépendante du fuseau.
+    expect(evening.window.salesCount).toBe(morning.window.salesCount);
   });
 
   it('n’entre pas deux fois le stock d’un achat rejoué', async () => {

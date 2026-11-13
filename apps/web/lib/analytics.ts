@@ -1,5 +1,5 @@
 import { Prisma, withTenant, type TenantContext, type TenantTx } from '@pharmaiq/db';
-import type { ProductStat, StockAlertLine, ExpiryAlertLine } from '@pharmaiq/core';
+import { safeTimeZone, type ProductStat, type StockAlertLine, type ExpiryAlertLine } from '@pharmaiq/core';
 
 /**
  * Couche d'analyse : tout le SQL qui alimente le tableau de bord, les conseils
@@ -201,11 +201,21 @@ export interface DashboardData {
 
 export async function getDashboard(
   ctx: TenantContext,
-  options: { windowDays?: number } = {},
+  options: { windowDays?: number; timeZone?: string } = {},
 ): Promise<DashboardData> {
   const windowDays = options.windowDays ?? 30;
 
   return withTenant(ctx, async (tx) => {
+    // « Aujourd'hui » est la journée de la pharmacie, pas celle de la base (UTC).
+    const pharmacy = await tx.pharmacy.findFirst({
+      where: { id: ctx.pharmacyId },
+      select: { timezone: true },
+    });
+    const tz = safeTimeZone(options.timeZone ?? pharmacy?.timezone);
+    // "Sale".date est un horodatage UTC sans fuseau : on ramène le début de la
+    // journée locale dans ce même repère pour comparer des choses comparables.
+    const todayStart = Prisma.sql`((date_trunc('day', now() at time zone ${tz}) at time zone ${tz}) at time zone 'UTC')`;
+
     const [totals] = await tx.$queryRaw<
       Array<{
         today_revenue: number;
@@ -219,9 +229,9 @@ export async function getDashboard(
       }>
     >(Prisma.sql`
       select
-        coalesce(sum("grandTotal") filter (where date >= current_date), 0)::float            as today_revenue,
-        coalesce(sum("grandTotal" - "costTotal") filter (where date >= current_date), 0)::float as today_profit,
-        count(*) filter (where date >= current_date)::int                                    as today_sales,
+        coalesce(sum("grandTotal") filter (where date >= ${todayStart}), 0)::float            as today_revenue,
+        coalesce(sum("grandTotal" - "costTotal") filter (where date >= ${todayStart}), 0)::float as today_profit,
+        count(*) filter (where date >= ${todayStart})::int                                    as today_sales,
         coalesce(sum("grandTotal") filter (where date >= now() - ${days(windowDays)}), 0)::float as window_revenue,
         coalesce(sum("grandTotal" - "costTotal") filter (where date >= now() - ${days(windowDays)}), 0)::float as window_profit,
         count(*) filter (where date >= now() - ${days(windowDays)})::int                     as window_sales,
@@ -235,7 +245,7 @@ export async function getDashboard(
     const series = await tx.$queryRaw<
       Array<{ day: Date; revenue: number; profit: number; sales: number }>
     >(Prisma.sql`
-      select date_trunc('day', date)::date                       as day,
+      select date_trunc('day', (date at time zone 'UTC') at time zone ${tz})::date as day,
              coalesce(sum("grandTotal"), 0)::float               as revenue,
              coalesce(sum("grandTotal" - "costTotal"), 0)::float as profit,
              count(*)::int                                       as sales
