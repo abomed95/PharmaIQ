@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { withTenant } from '@pharmaiq/db';
 import { allocateFefo, type StockLot } from '@pharmaiq/core';
 import { ConflictError, NotFoundError } from '../http';
-import { toTenantContext, type SessionUser } from '../auth';
+import { toTenantContext, type SessionUser } from '../session';
 import { stockAdjustSchema } from '../validation';
+import { resolveBranchId } from './branches';
 
 /** Ajustements manuels de stock (casse, inventaire, retour, péremption). */
 
@@ -28,17 +29,7 @@ export async function adjustStock(
     });
     if (!product) throw new NotFoundError('Produit introuvable');
 
-    const branchId =
-      input.branchId ??
-      user.branchId ??
-      (
-        await tx.branch.findFirst({
-          where: { pharmacyId: ctx.pharmacyId },
-          orderBy: [{ isMain: 'desc' }, { createdAt: 'asc' }],
-          select: { id: true },
-        })
-      )?.id;
-    if (!branchId) throw new NotFoundError('Aucune succursale configurée');
+    const branchId = await resolveBranchId(tx, ctx.pharmacyId, input.branchId, user.branchId);
 
     let movements = 0;
 

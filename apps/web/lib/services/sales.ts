@@ -1,19 +1,22 @@
 import { z } from 'zod';
-import { withTenant, nextCounter, type TenantTx } from '@pharmaiq/db';
+import { withTenant, nextCounter } from '@pharmaiq/db';
 import {
   allocateFefo,
   computeChange,
   computeTotals,
   counterKey,
   formatInvoiceNumber,
+  isPriceOverride,
   lineTotal,
   round2,
+  sellableLots,
   weightedUnitCost,
   type StockLot,
 } from '@pharmaiq/core';
 import { ConflictError, NotFoundError, ValidationError } from '../http';
-import { toTenantContext, type SessionUser } from '../auth';
+import { toTenantContext, type SessionUser } from '../session';
 import { saleCreateSchema } from '../validation';
+import { resolveBranchId } from './branches';
 
 /**
  * Encaissement (§5.4 / §11 « caisse »).
@@ -50,29 +53,6 @@ export interface SaleResult {
   }>;
   /** true si la vente existait déjà (rejeu de la même `clientRef`). */
   replayed: boolean;
-}
-
-async function resolveBranchId(
-  tx: TenantTx,
-  pharmacyId: string,
-  requested: string | null | undefined,
-  fallback: string | null,
-): Promise<string> {
-  const candidate = requested ?? fallback;
-  if (candidate) {
-    const branch = await tx.branch.findFirst({
-      where: { id: candidate, pharmacyId },
-      select: { id: true },
-    });
-    if (branch) return branch.id;
-  }
-  const main = await tx.branch.findFirst({
-    where: { pharmacyId },
-    orderBy: [{ isMain: 'desc' }, { createdAt: 'asc' }],
-    select: { id: true },
-  });
-  if (!main) throw new NotFoundError('Aucune succursale configurée pour cette pharmacie');
-  return main.id;
 }
 
 export async function createSale(user: SessionUser, input: SaleInput): Promise<SaleResult> {
@@ -127,6 +107,16 @@ export async function createSale(user: SessionUser, input: SaleInput): Promise<S
     }
     const productById = new Map(products.map((p) => [p.id, p]));
 
+    // Le client rattaché doit appartenir à CETTE pharmacie : une clé étrangère
+    // ne passe pas par la RLS.
+    if (input.customerId) {
+      const customer = await tx.customer.findFirst({
+        where: { id: input.customerId, pharmacyId: ctx.pharmacyId },
+        select: { id: true },
+      });
+      if (!customer) throw new NotFoundError('Client inconnu dans cette pharmacie');
+    }
+
     // --- Allocation FEFO + décrément du stock --------------------------------
     const allocatedItems: Array<{
       productId: string;
@@ -140,6 +130,14 @@ export async function createSale(user: SessionUser, input: SaleInput): Promise<S
     }> = [];
 
     let costTotal = 0;
+    const now = new Date();
+    const priceOverrides: Array<{
+      productId: string;
+      name: string;
+      catalogPrice: number;
+      chargedPrice: number;
+      quantity: number;
+    }> = [];
 
     for (const item of input.items) {
       const product = productById.get(item.productId);
@@ -156,19 +154,35 @@ export async function createSale(user: SessionUser, input: SaleInput): Promise<S
         select: { id: true, quantity: true, expiryDate: true, purchasePrice: true, batchNo: true },
       });
 
-      const stockLots: StockLot[] = lots.map((lot) => ({
+      const allLots: StockLot[] = lots.map((lot) => ({
         id: lot.id,
         quantity: lot.quantity,
         expiryDate: lot.expiryDate,
         purchasePrice: Number(lot.purchasePrice),
         batchNo: lot.batchNo,
       }));
+      // Un lot périmé ne se vend pas, même s'il est le premier dans l'ordre FEFO.
+      const stockLots = sellableLots(allLots, now);
+      const expiredUnits = allLots
+        .filter((lot) => !stockLots.includes(lot))
+        .reduce((sum, lot) => sum + lot.quantity, 0);
 
       const allocation = allocateFefo(stockLots, item.quantity);
       if (allocation.shortage > 0) {
         throw new ConflictError(
-          `Stock insuffisant pour « ${product.name} » : ${allocation.allocated} disponible(s) sur ${item.quantity} demandé(s)`,
+          `Stock insuffisant pour « ${product.name} » : ${allocation.allocated} disponible(s) sur ${item.quantity} demandé(s)` +
+            (expiredUnits > 0 ? ` (${expiredUnits} unité(s) périmée(s) non vendable(s))` : ''),
         );
+      }
+
+      if (isPriceOverride(Number(product.sellingPrice), item.unitPrice)) {
+        priceOverrides.push({
+          productId: item.productId,
+          name: product.name,
+          catalogPrice: Number(product.sellingPrice),
+          chargedPrice: item.unitPrice,
+          quantity: item.quantity,
+        });
       }
 
       for (const alloc of allocation.allocations) {
@@ -221,7 +235,6 @@ export async function createSale(user: SessionUser, input: SaleInput): Promise<S
     const { change, due } = computeChange(totals.grandTotal, paid);
 
     // --- Numérotation de la facture -----------------------------------------
-    const now = new Date();
     const sequence = await nextCounter(tx, ctx.pharmacyId, counterKey(now));
     const invoiceId = formatInvoiceNumber(user.invoicePrefix, sequence, now);
 
@@ -283,6 +296,21 @@ export async function createSale(user: SessionUser, input: SaleInput): Promise<S
       }
     }
 
+    // Un prix négocié au comptoir est permis, mais il laisse une trace : sinon
+    // une vente à prix cassé ne se distingue pas d'une vente normale.
+    if (priceOverrides.length > 0) {
+      await tx.auditLog.create({
+        data: {
+          pharmacyId: ctx.pharmacyId,
+          userId: ctx.userId,
+          action: 'sale.price_override',
+          entity: 'Sale',
+          entityId: sale.id,
+          meta: { invoiceId: sale.invoiceId, lines: priceOverrides },
+        },
+      });
+    }
+
     // Fidélité : 1 point par unité monétaire dépensée, arrondi à l'entier.
     if (input.customerId) {
       await tx.customer.updateMany({
@@ -320,8 +348,12 @@ export async function createSale(user: SessionUser, input: SaleInput): Promise<S
 }
 
 /**
- * Annulation d'une vente : remet les quantités en stock sur un lot de retour et
- * journalise. On ne supprime jamais une vente (piste d'audit).
+ * Annulation d'une vente : chaque unité retourne dans SON lot d'origine (même
+ * numéro, même péremption) et l'opération est journalisée. On ne supprime
+ * jamais une vente (piste d'audit).
+ *
+ * Remettre le stock sur un lot « retour » sans date le faisait sortir des
+ * alertes de péremption et passer en dernier dans l'ordre FEFO.
  */
 export async function cancelSale(user: SessionUser, saleId: string, reason: string): Promise<void> {
   const ctx = toTenantContext(user);
@@ -333,27 +365,83 @@ export async function cancelSale(user: SessionUser, saleId: string, reason: stri
       include: { items: true },
     });
     if (!sale) throw new NotFoundError('Vente introuvable');
-    if (sale.status !== 'completed') throw new ConflictError('Cette vente est déjà annulée');
 
-    for (const item of sale.items) {
-      await tx.stock.create({
-        data: {
+    // Le changement de statut sert de verrou : de deux annulations simultanées,
+    // une seule passe, et le stock n'est remis qu'une fois.
+    const claimed = await tx.sale.updateMany({
+      where: { id: sale.id, pharmacyId: ctx.pharmacyId, status: 'completed' },
+      data: { status: 'cancelled' },
+    });
+    if (claimed.count !== 1) throw new ConflictError('Cette vente est déjà annulée');
+
+    // Coût unitaire par produit, pour valoriser un lot qu'il faudrait recréer.
+    const unitCostByProduct = new Map(sale.items.map((i) => [i.productId, Number(i.unitCost)]));
+
+    // Le journal des mouvements garde le lot exact servi à la vente.
+    const outgoing = await tx.stockMovement.findMany({
+      where: { pharmacyId: ctx.pharmacyId, refType: 'sale', refId: sale.id, type: 'sale' },
+      select: { productId: true, branchId: true, quantityDelta: true, batchNo: true, expiryDate: true },
+    });
+
+    // Vente antérieure au journal par lot : on retombe sur les lignes de vente.
+    const returns =
+      outgoing.length > 0
+        ? outgoing.map((m) => ({
+            productId: m.productId,
+            branchId: m.branchId,
+            quantity: Math.abs(m.quantityDelta),
+            batchNo: m.batchNo,
+            expiryDate: m.expiryDate,
+          }))
+        : sale.items.map((item) => ({
+            productId: item.productId,
+            branchId: sale.branchId,
+            quantity: item.quantity,
+            batchNo: `RETOUR-${sale.invoiceId}`,
+            expiryDate: null as Date | null,
+          }));
+
+    for (const back of returns) {
+      const lot = await tx.stock.findFirst({
+        where: {
           pharmacyId: ctx.pharmacyId,
-          productId: item.productId,
-          branchId: sale.branchId,
-          quantity: item.quantity,
-          batchNo: `RETOUR-${sale.invoiceId}`,
-          purchasePrice: item.unitCost,
+          productId: back.productId,
+          branchId: back.branchId,
+          batchNo: back.batchNo,
+          expiryDate: back.expiryDate,
         },
+        select: { id: true },
       });
+
+      if (lot) {
+        await tx.stock.update({
+          where: { id: lot.id },
+          data: { quantity: { increment: back.quantity } },
+        });
+      } else {
+        await tx.stock.create({
+          data: {
+            pharmacyId: ctx.pharmacyId,
+            productId: back.productId,
+            branchId: back.branchId,
+            quantity: back.quantity,
+            batchNo: back.batchNo,
+            expiryDate: back.expiryDate,
+            purchasePrice: unitCostByProduct.get(back.productId) ?? 0,
+          },
+        });
+      }
+
       await tx.stockMovement.create({
         data: {
           pharmacyId: ctx.pharmacyId,
-          productId: item.productId,
-          branchId: sale.branchId,
+          productId: back.productId,
+          branchId: back.branchId,
           type: 'return',
           source: 'pos',
-          quantityDelta: item.quantity,
+          quantityDelta: back.quantity,
+          batchNo: back.batchNo,
+          expiryDate: back.expiryDate,
           reason,
           refType: 'sale',
           refId: sale.id,
@@ -362,7 +450,22 @@ export async function cancelSale(user: SessionUser, saleId: string, reason: stri
       });
     }
 
-    await tx.sale.update({ where: { id: sale.id }, data: { status: 'cancelled' } });
+    // Les points de fidélité gagnés sur cette vente sont repris, sans passer
+    // sous zéro si le client en a dépensé entre-temps.
+    if (sale.customerId) {
+      const customer = await tx.customer.findFirst({
+        where: { id: sale.customerId, pharmacyId: ctx.pharmacyId },
+        select: { id: true, loyaltyPoints: true },
+      });
+      if (customer) {
+        const earned = Math.floor(Number(sale.grandTotal));
+        await tx.customer.update({
+          where: { id: customer.id },
+          data: { loyaltyPoints: Math.max(0, customer.loyaltyPoints - earned) },
+        });
+      }
+    }
+
     await tx.auditLog.create({
       data: {
         pharmacyId: ctx.pharmacyId,

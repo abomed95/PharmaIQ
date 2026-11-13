@@ -64,6 +64,14 @@ export function PosTerminal({
   const [pending, setPending] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  // Clé d'idempotence du panier EN COURS : elle doit survivre à un nouvel essai
+  // après coupure réseau, sinon le serveur ne peut pas reconnaître le doublon.
+  const clientRefRef = useRef<string | null>(null);
+
+  // Un panier modifié est une autre vente : il lui faut une autre clé.
+  useEffect(() => {
+    clientRefRef.current = null;
+  }, [cart]);
 
   // Recherche différée : on ne matraque pas l'API à chaque frappe.
   useEffect(() => {
@@ -166,10 +174,11 @@ export function PosTerminal({
     setPending(true);
     setError(null);
 
-    const clientRef =
+    clientRefRef.current ??=
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `pos-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const clientRef = clientRefRef.current;
 
     try {
       const response = await fetch('/api/sales', {
@@ -209,6 +218,9 @@ export function PosTerminal({
         ),
       });
       reset();
+    } catch {
+      // Réseau coupé : la clé d'idempotence est conservée, réessayer est sûr.
+      setError(labels.common.error);
     } finally {
       setPending(false);
     }
