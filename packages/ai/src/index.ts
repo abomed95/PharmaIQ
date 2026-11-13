@@ -26,6 +26,7 @@ export {
   type ExtractReceiptInput,
   type ExtractReceiptResult,
   type SupportedMediaType,
+  sanitizeHint,
 } from './extractReceipt';
 export {
   explainPurchaseAdvice,
