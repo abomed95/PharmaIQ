@@ -11,6 +11,21 @@ import { PAYMENT_METHODS } from '@pharmaiq/core';
 
 export const uuid = z.string().uuid();
 
+/**
+ * URL web uniquement. `z.string().url()` accepte aussi `javascript:` ou
+ * `data:`, qui deviendraient exécutables le jour où l'URL est affichée en lien.
+ */
+export const httpUrl = z
+  .string()
+  .url()
+  .max(2000)
+  .refine((value) => /^https?:\/\//i.test(value), 'URL http(s) attendue');
+
+/** 5 Mo d'image (limite de l'API) encodés en base64, avec un peu de marge. */
+const MAX_IMAGE_BASE64_CHARS = 7_200_000;
+/** La sortie brute du modèle est gardée pour audit, pas pour stocker n'importe quoi. */
+const MAX_AI_RAW_CHARS = 200_000;
+
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
@@ -43,10 +58,15 @@ export const stockAdjustSchema = z
     productId: uuid,
     branchId: uuid.optional(),
     /** Positif = entrée, négatif = sortie. */
-    quantityDelta: z.coerce.number().int().refine((n) => n !== 0, 'La quantité ne peut pas être nulle'),
+    quantityDelta: z.coerce
+      .number()
+      .int()
+      .min(-100_000)
+      .max(100_000)
+      .refine((n) => n !== 0, 'La quantité ne peut pas être nulle'),
     batchNo: z.string().trim().max(60).optional().nullable(),
     expiryDate: z.coerce.date().optional().nullable(),
-    purchasePrice: z.coerce.number().min(0).optional(),
+    purchasePrice: z.coerce.number().min(0).max(10_000_000).optional(),
     reason: z.string().trim().max(200),
     type: z.enum(['adjustment', 'return', 'expiry', 'purchase']).default('adjustment'),
   })
@@ -68,8 +88,8 @@ export const saleCreateSchema = z
     items: z.array(saleItemSchema).min(1).max(200),
     paymentMethod: z.enum(PAYMENT_METHODS),
     /** Remise globale en montant. */
-    discount: z.coerce.number().min(0).default(0),
-    paid: z.coerce.number().min(0).default(0),
+    discount: z.coerce.number().min(0).max(1_000_000_000).default(0),
+    paid: z.coerce.number().min(0).max(1_000_000_000).default(0),
     customerId: uuid.optional().nullable(),
     branchId: uuid.optional().nullable(),
     note: z.string().trim().max(300).optional().nullable(),
@@ -83,9 +103,9 @@ export const saleCreateSchema = z
 export const receiptAnalyzeSchema = z
   .object({
     /** Image encodée en base64 (sans le préfixe data:). */
-    imageBase64: z.string().min(100),
+    imageBase64: z.string().min(100).max(MAX_IMAGE_BASE64_CHARS),
     mediaType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
-    imageUrl: z.string().url().optional(),
+    imageUrl: httpUrl.optional(),
     hint: z.string().trim().max(300).optional(),
   })
   .strict();
@@ -114,10 +134,16 @@ export const purchaseConfirmSchema = z
     invoiceRef: z.string().trim().max(100).optional().nullable(),
     date: z.coerce.date().optional().nullable(),
     branchId: uuid.optional().nullable(),
-    receiptImageUrl: z.string().url().optional().nullable(),
+    receiptImageUrl: httpUrl.optional().nullable(),
     aiExtracted: z.boolean().default(false),
     aiConfidence: z.coerce.number().min(0).max(1).optional().nullable(),
-    aiRaw: z.unknown().optional(),
+    aiRaw: z
+      .unknown()
+      .optional()
+      .refine(
+        (value) => value === undefined || JSON.stringify(value).length <= MAX_AI_RAW_CHARS,
+        'Sortie brute du modèle trop volumineuse',
+      ),
     items: z.array(purchaseConfirmItemSchema).min(1).max(300),
     /** Clé d'idempotence : évite la double entrée en stock si le réseau coupe. */
     clientRef: z.string().trim().min(6).max(80).optional(),
