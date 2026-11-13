@@ -1,3 +1,8 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const monorepoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
 /**
  * Politique de contenu. `unsafe-inline` reste nécessaire pour les scripts
  * d'amorçage de Next (sans nonce) et les styles en ligne de React : le risque
@@ -35,6 +40,20 @@ function contentSecurityPolicy() {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Image de production autonome (Cloud Run) : seuls les fichiers réellement
+  // utilisés sont copiés. La racine de traçage est celle du monorepo, sinon les
+  // paquets `packages/*` et le moteur Prisma manqueraient dans l'image.
+  output: 'standalone',
+  outputFileTracingRoot: monorepoRoot,
+  // Le moteur de requêtes Prisma est un binaire chargé dynamiquement : le
+  // traçage ne le voit pas dans un dépôt pnpm, et l'image partirait sans lui
+  // (« could not locate the Query Engine »). On l'inclut explicitement.
+  outputFileTracingIncludes: {
+    '/**': [
+      '../../node_modules/.pnpm/@prisma+client*/node_modules/.prisma/client/*.node',
+      '../../node_modules/.pnpm/@prisma+client*/node_modules/.prisma/client/schema.prisma',
+    ],
+  },
   // Ne pas annoncer la pile technique dans chaque réponse.
   poweredByHeader: false,
   // Les packages du monorepo sont consommés en TypeScript source.

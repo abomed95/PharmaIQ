@@ -1,0 +1,26 @@
+# Tout ce qui n'a rien à faire dans le contexte de build : poids, et surtout
+# secrets locaux qui ne doivent jamais entrer dans une image.
+.git
+.github
+node_modules
+**/node_modules
+.next
+**/.next
+.turbo
+**/.turbo
+coverage
+dist
+.env
+.env.*
+!.env.example
+*.log
+docs
+tests
+data
+AUDIT.md
+SECURITY.md
+DEPLOY.md
+README.md
+Dockerfile
+.dockerignore
+cloudbuild.yaml
