@@ -76,8 +76,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Toutes les routes sauf les fichiers statiques et les ressources PWA.
+     * Toutes les routes sauf les fichiers statiques, les ressources PWA et la
+     * sonde de santé (elle ne doit pas dépendre de Supabase).
      */
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/|api/health).*)',
   ],
 };
