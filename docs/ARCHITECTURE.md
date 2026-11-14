@@ -7,7 +7,7 @@ Navigateur (PWA, mobile-first)
         │
         │  cookies de session Supabase
         ▼
-Next.js 14 App Router ─────────────────────────────┐
+Next.js 15 App Router ─────────────────────────────┐
   Server Components  │  Route Handlers (/api/*)    │
         │            │                             │
         │  requireSession() / requirePermission()   │

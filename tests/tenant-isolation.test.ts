@@ -187,6 +187,21 @@ describe.skipIf(!hasDatabase)('isolation multi-tenant (RLS PostgreSQL)', () => {
     expect(count).toBe(0);
   });
 
+  it('ne donne aucun droit sur les tables aux rôles PostgREST de Supabase', async () => {
+    // Un accès direct par PostgREST contournerait les permissions par rôle
+    // (caissier, gestionnaire…), que seule l'application applique.
+    const open = await prismaAdmin.$queryRaw<Array<{ role: string; table: string }>>(Prisma.sql`
+      select r.rolname as role, c.relname as "table"
+      from pg_roles r
+      cross join pg_class c
+      where r.rolname in ('authenticated', 'anon')
+        and c.relnamespace = 'public'::regnamespace
+        and c.relkind = 'r'
+        and has_table_privilege(r.rolname, c.oid, 'select, insert, update, delete')
+    `);
+    expect(open).toEqual([]);
+  });
+
   it('ne laisse pas fuir le tenant d’une transaction à la suivante', async () => {
     await withTenant(a.ctx, (tx) => currentPharmacyId(tx));
 

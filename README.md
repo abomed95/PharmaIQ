@@ -87,7 +87,7 @@ Détails d'installation, rôle PostgreSQL applicatif, Supabase, WhatsApp et dép
 
 ```
 pharmaiq/
-├── apps/web/                  Next.js 14 (App Router) — écrans + API
+├── apps/web/                  Next.js 15 (App Router) — écrans + API
 │   ├── app/(marketing)/       page publique
 │   ├── app/(auth)/            connexion, création de pharmacie
 │   ├── app/(app)/             espace connecté (dashboard, pos, stock…)

@@ -1,7 +1,11 @@
 import { cache } from 'react';
-import { prismaAdmin, type TenantContext } from '@pharmaiq/db';
-import { assertCan, type Permission, type Role } from '@pharmaiq/core';
+import { prismaAdmin } from '@pharmaiq/db';
+import { assertCan, logger, type Permission, type Role } from '@pharmaiq/core';
 import { createSupabaseServerClient } from './supabase/server';
+import { UnauthorizedError, type SessionUser } from './session';
+
+// Réexportés : les routes et les pages n'ont qu'un module d'auth à connaître.
+export { UnauthorizedError, toTenantContext, type SessionUser } from './session';
 
 /**
  * Résolution du tenant — LE point de sécurité de l'application.
@@ -11,29 +15,12 @@ import { createSupabaseServerClient } from './supabase/server';
  * (corps de requête, query string, en-tête).
  */
 
-export class UnauthorizedError extends Error {
-  constructor(message = 'Authentification requise') {
-    super(message);
-    this.name = 'UnauthorizedError';
-  }
-}
-
-export interface SessionUser extends TenantContext {
-  fullName: string;
-  pharmacyName: string;
-  pharmacySlug: string;
-  currency: string;
-  locale: string;
-  invoicePrefix: string;
-  taxRate: number;
-}
-
 /**
  * `cache()` dédoublonne l'appel pendant un même rendu : la même requête
  * n'interroge la base qu'une fois, même si dix composants la demandent.
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   // getUser() revalide le JWT auprès de Supabase — plus sûr que getSession().
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return null;
@@ -69,7 +56,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   // Défense en profondeur : le claim doit correspondre à la base.
   const claimed = (data.user.app_metadata as Record<string, unknown> | undefined)?.pharmacy_id;
   if (typeof claimed === 'string' && claimed !== dbUser.pharmacyId) {
-    console.error('[auth] claim pharmacy_id incohérent avec la base', {
+    logger.error('auth : claim pharmacy_id incohérent avec la base', {
       authUserId: data.user.id,
     });
     return null;
@@ -103,15 +90,4 @@ export async function requirePermission(permission: Permission): Promise<Session
   const user = await requireSession();
   assertCan(user.role, permission);
   return user;
-}
-
-/** Contexte tenant nu, à passer à `withTenant()`. */
-export function toTenantContext(user: SessionUser): TenantContext {
-  return {
-    pharmacyId: user.pharmacyId,
-    userId: user.userId,
-    role: user.role,
-    branchId: user.branchId,
-    email: user.email,
-  };
 }

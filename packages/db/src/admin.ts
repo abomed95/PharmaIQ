@@ -18,6 +18,26 @@ import { PrismaClient } from '@prisma/client';
 const adminUrl =
   process.env.ADMIN_DATABASE_URL ?? process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 
+// Retomber sur DATABASE_URL est toujours une erreur de configuration en
+// production : soit ce rôle est soumis à la RLS et plus personne ne peut se
+// connecter (la session ne se résout pas), soit il la contourne et la RLS ne
+// protège plus rien. On le dit haut et fort plutôt que de laisser deviner.
+if (
+  process.env.NODE_ENV === 'production' &&
+  !process.env.ADMIN_DATABASE_URL &&
+  !process.env.DIRECT_URL
+) {
+  console.error(
+    JSON.stringify({
+      severity: 'ERROR',
+      message:
+        'ADMIN_DATABASE_URL absente : prismaAdmin utilise DATABASE_URL. ' +
+        'Définis ADMIN_DATABASE_URL (rôle BYPASSRLS) et réserve DATABASE_URL au rôle soumis à la RLS.',
+      time: new Date().toISOString(),
+    }),
+  );
+}
+
 const globalForPrisma = globalThis as unknown as { pharmaiqPrismaAdmin?: PrismaClient };
 
 export const prismaAdmin: PrismaClient =

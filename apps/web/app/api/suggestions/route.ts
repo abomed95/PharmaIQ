@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { logger } from '@pharmaiq/core';
 import { handleRoute, jsonOk, parseQuery } from '@/lib/http';
 import { requirePermission } from '@/lib/auth';
 import { suggestionsQuerySchema } from '@/lib/validation';
@@ -21,7 +22,7 @@ export const GET = handleRoute(async (request: NextRequest) => {
 
   // Historiser l'état du jour : permet de mesurer plus tard ce qui a été suivi.
   await persistSuggestions(user, result.suggestions, result.period).catch((error) => {
-    console.error('[suggestions] persistance impossible', error);
+    logger.error('suggestions : persistance impossible', { pharmacyId: user.pharmacyId, error });
   });
 
   return jsonOk(result);

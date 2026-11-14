@@ -13,10 +13,12 @@ import {
 export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { onboarding?: string };
+  searchParams: Promise<{ onboarding?: string }>;
 }) {
+  // Depuis Next 15, les paramètres d'URL arrivent sous forme de promesse.
+  const searchParams = await searchParamsPromise;
   const user = await requirePermission('settings.manage');
   const dict = getDictionary(user.locale);
   const ctx = toTenantContext(user);

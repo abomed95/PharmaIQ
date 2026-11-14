@@ -8,10 +8,12 @@ import { Badge, EmptyState, PageHeader, StatCard } from '@/components/ui';
 export const dynamic = 'force-dynamic';
 
 export default async function SalesPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { from?: string; to?: string; method?: string };
+  searchParams: Promise<{ from?: string; to?: string; method?: string }>;
 }) {
+  // Depuis Next 15, les paramètres d'URL arrivent sous forme de promesse.
+  const searchParams = await searchParamsPromise;
   const user = await requirePermission('sales.view');
   const dict = getDictionary(user.locale);
   const ctx = toTenantContext(user);

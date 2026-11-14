@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { Prisma, withTenant, type TenantTx } from '@pharmaiq/db';
+import { Prisma, withTenant } from '@pharmaiq/db';
 import { round2 } from '@pharmaiq/core';
 import { NotFoundError } from '../http';
-import { toTenantContext, type SessionUser } from '../auth';
+import { toTenantContext, type SessionUser } from '../session';
 import { purchaseConfirmSchema } from '../validation';
+import { resolveBranchId } from './branches';
 
 /**
  * Confirmation d'un achat fournisseur → entrée en stock (§6.2 étape 5).
@@ -19,30 +20,12 @@ export interface PurchaseResult {
   total: number;
   createdProducts: number;
   updatedLots: number;
+  /** true si l'achat existait déjà (rejeu de la même `clientRef`). */
+  replayed: boolean;
 }
 
-async function resolveBranchId(
-  tx: TenantTx,
-  pharmacyId: string,
-  requested: string | null | undefined,
-  fallback: string | null,
-): Promise<string> {
-  const candidate = requested ?? fallback;
-  if (candidate) {
-    const branch = await tx.branch.findFirst({
-      where: { id: candidate, pharmacyId },
-      select: { id: true },
-    });
-    if (branch) return branch.id;
-  }
-  const main = await tx.branch.findFirst({
-    where: { pharmacyId },
-    orderBy: [{ isMain: 'desc' }, { createdAt: 'asc' }],
-    select: { id: true },
-  });
-  if (!main) throw new NotFoundError('Aucune succursale configurée');
-  return main.id;
-}
+/** Un reçu de 300 lignes fait plusieurs milliers d'écritures : 20 s ne suffisent pas. */
+const PURCHASE_TX_TIMEOUT_MS = 60_000;
 
 /** Prix de vente par défaut d'un nouveau produit : marge 25 %, arrondi à 5. */
 function defaultSellingPrice(purchasePrice: number): number {
@@ -57,6 +40,23 @@ export async function confirmPurchase(
   const ctx = toTenantContext(user);
 
   return withTenant(ctx, async (tx) => {
+    // --- Idempotence : la même clé n'entre jamais deux fois le stock ---------
+    if (input.clientRef) {
+      const existing = await tx.purchase.findFirst({
+        where: { pharmacyId: ctx.pharmacyId, clientRef: input.clientRef },
+        select: { id: true, total: true, _count: { select: { items: true } } },
+      });
+      if (existing) {
+        return {
+          purchaseId: existing.id,
+          total: Number(existing.total),
+          createdProducts: 0,
+          updatedLots: existing._count.items,
+          replayed: true,
+        };
+      }
+    }
+
     const branchId = await resolveBranchId(tx, ctx.pharmacyId, input.branchId, user.branchId);
 
     // --- Fournisseur ---------------------------------------------------------
@@ -78,6 +78,7 @@ export async function confirmPurchase(
         supplierId,
         branchId,
         invoiceRef: input.invoiceRef ?? null,
+        clientRef: input.clientRef ?? null,
         date: input.date ?? new Date(),
         status: 'confirmed',
         receiptImageUrl: input.receiptImageUrl ?? null,
@@ -108,20 +109,28 @@ export async function confirmPurchase(
       } else {
         const name = (item.newProductName ?? item.rawName ?? '').trim();
         if (!name) throw new NotFoundError('Nom de produit manquant');
-        const created = await tx.product.upsert({
+        // Le nom peut déjà exister (même produit saisi deux fois sur le reçu) :
+        // on ne compte comme « créé » que ce qui l'est vraiment.
+        const known = await tx.product.findUnique({
           where: { pharmacyId_name: { pharmacyId: ctx.pharmacyId, name } },
-          create: {
-            pharmacyId: ctx.pharmacyId,
-            name,
-            purchasePrice: item.purchasePrice,
-            sellingPrice: item.sellingPrice ?? defaultSellingPrice(item.purchasePrice),
-            supplierName: supplierName ?? null,
-          },
-          update: {},
           select: { id: true },
         });
-        productId = created.id;
-        createdProducts += 1;
+        if (known) {
+          productId = known.id;
+        } else {
+          const created = await tx.product.create({
+            data: {
+              pharmacyId: ctx.pharmacyId,
+              name,
+              purchasePrice: item.purchasePrice,
+              sellingPrice: item.sellingPrice ?? defaultSellingPrice(item.purchasePrice),
+              supplierName: supplierName ?? null,
+            },
+            select: { id: true },
+          });
+          productId = created.id;
+          createdProducts += 1;
+        }
       }
 
       // --- Lot : on fusionne avec un lot identique (même n° + même date) -----
@@ -216,6 +225,6 @@ export async function confirmPurchase(
       },
     });
 
-    return { purchaseId: purchase.id, total, createdProducts, updatedLots };
-  });
+    return { purchaseId: purchase.id, total, createdProducts, updatedLots, replayed: false };
+  }, { timeout: PURCHASE_TX_TIMEOUT_MS });
 }

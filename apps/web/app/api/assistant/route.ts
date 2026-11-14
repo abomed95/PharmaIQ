@@ -4,6 +4,7 @@ import { handleRoute, jsonError, jsonOk, parseBody } from '@/lib/http';
 import { requirePermission, toTenantContext } from '@/lib/auth';
 import { assistantSchema } from '@/lib/validation';
 import { buildAssistantSnapshot } from '@/lib/analytics';
+import { consumeAiQuota } from '@/lib/services/aiQuota';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,7 @@ export const POST = handleRoute(async (request: NextRequest) => {
   }
 
   const input = await parseBody(request, assistantSchema);
+  await consumeAiQuota(user, 'assistant');
   const snapshot = await buildAssistantSnapshot(toTenantContext(user), { windowDays: 30 });
 
   const result = await askAssistant({

@@ -1,11 +1,64 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const monorepoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+/**
+ * Politique de contenu. `unsafe-inline` reste nécessaire pour les scripts
+ * d'amorçage de Next (sans nonce) et les styles en ligne de React : le risque
+ * résiduel est documenté dans SECURITY.md. Tout le reste est fermé.
+ */
+function contentSecurityPolicy() {
+  const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  let supabaseOrigin = '';
+  let supabaseSocket = '';
+  try {
+    const url = new URL(supabase);
+    supabaseOrigin = url.origin;
+    supabaseSocket = `wss://${url.host}`;
+  } catch {
+    // Non configuré (premier clone) : aucune origine externe autorisée.
+  }
+  const dev = process.env.NODE_ENV !== 'production';
+  return [
+    "default-src 'self'",
+    // `unsafe-eval` : rechargement à chaud du serveur de développement uniquement.
+    `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    `connect-src 'self' ${supabaseOrigin} ${supabaseSocket}`.trim(),
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Image de production autonome (Cloud Run) : seuls les fichiers réellement
+  // utilisés sont copiés. La racine de traçage est celle du monorepo, sinon les
+  // paquets `packages/*` et le moteur Prisma manqueraient dans l'image.
+  output: 'standalone',
+  outputFileTracingRoot: monorepoRoot,
+  // Le moteur de requêtes Prisma est un binaire chargé dynamiquement : le
+  // traçage ne le voit pas dans un dépôt pnpm, et l'image partirait sans lui
+  // (« could not locate the Query Engine »). On l'inclut explicitement.
+  outputFileTracingIncludes: {
+    '/**': [
+      '../../node_modules/.pnpm/@prisma+client*/node_modules/.prisma/client/*.node',
+      '../../node_modules/.pnpm/@prisma+client*/node_modules/.prisma/client/schema.prisma',
+    ],
+  },
+  // Ne pas annoncer la pile technique dans chaque réponse.
+  poweredByHeader: false,
   // Les packages du monorepo sont consommés en TypeScript source.
   transpilePackages: ['@pharmaiq/db', '@pharmaiq/core', '@pharmaiq/ai', '@pharmaiq/whatsapp'],
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client', '@anthropic-ai/sdk'],
-  },
+  serverExternalPackages: ['@prisma/client', '@anthropic-ai/sdk'],
   async headers() {
     return [
       {
@@ -15,6 +68,9 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=()' },
+          { key: 'Content-Security-Policy', value: contentSecurityPolicy() },
+          // Ignoré par les navigateurs en HTTP : sans effet en développement local.
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
         ],
       },
     ];

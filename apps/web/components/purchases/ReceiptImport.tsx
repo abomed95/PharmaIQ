@@ -93,6 +93,9 @@ export function ReceiptImport({
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  // Clé d'idempotence de l'achat en cours de validation : un nouvel essai après
+  // coupure réseau ne doit pas entrer le stock une seconde fois.
+  const clientRefRef = useRef<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [lines, setLines] = useState<EditableLine[]>([]);
@@ -109,6 +112,8 @@ export function ReceiptImport({
 
     setError(null);
     setDone(null);
+    // Nouvelle photo, nouvel achat.
+    clientRefRef.current = null;
     setStatus('analyzing');
     setPreview(URL.createObjectURL(file));
 
@@ -172,6 +177,11 @@ export function ReceiptImport({
     setStatus('saving');
     setError(null);
 
+    clientRefRef.current ??=
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `achat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
     try {
       const response = await fetch('/api/purchases/confirm', {
         method: 'POST',
@@ -183,6 +193,7 @@ export function ReceiptImport({
           aiExtracted: true,
           aiConfidence: analysis?.confidence ?? null,
           aiRaw: analysis?.raw,
+          clientRef: clientRefRef.current,
           items: kept.map((line) => ({
             productId: line.productId,
             newProductName: line.productId ? null : line.newProductName || line.rawName,
@@ -209,7 +220,11 @@ export function ReceiptImport({
       setAnalysis(null);
       setLines([]);
       setPreview(null);
+      clientRefRef.current = null;
       router.refresh();
+    } catch {
+      // Réseau coupé : la clé d'idempotence est conservée, réessayer est sûr.
+      setError(labels.common.error);
     } finally {
       setStatus('idle');
     }

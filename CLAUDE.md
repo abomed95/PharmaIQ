@@ -42,6 +42,8 @@
 | Validation d'entrée HTTP | `apps/web/lib/validation.ts` |
 | Route HTTP | `apps/web/app/api/**/route.ts` — mince : auth → validation → service → `jsonOk` |
 | Appel Claude | `packages/ai` uniquement (jamais d'appel direct depuis `apps/web`) |
+| Types de session (`SessionUser`, `toTenantContext`) | `apps/web/lib/session.ts` — sans React ni Next, importable par les services et les tests |
+| Journal | `logger` de `packages/core` (une ligne JSON par événement) — pas de `console.*` côté serveur |
 
 Une route qui contient de la logique métier est mal placée : elle appartient à un service ou à
 `core`.
@@ -67,11 +69,14 @@ Une route qui contient de la logique métier est mal placée : elle appartient �
 pnpm test                                        # tout
 pnpm vitest run tests/suggestions.test.ts        # un fichier
 pnpm test:rls                                    # isolation (nécessite DATABASE_URL)
+pnpm test:db                                     # isolation + caisse/achats sur base réelle
 ```
 
 - Toute règle métier ajoutée à `core` vient avec son test.
-- Le test d'isolation est ignoré sans `DATABASE_URL` ; il tourne en CI sur une vraie base avec un
-  rôle `nobypassrls`.
+- Les tests sur base (`tenant-isolation`, `services.db`) sont ignorés sans `DATABASE_URL` ; ils
+  tournent en CI sur une vraie base avec un rôle `nobypassrls`. Ils exigent `pnpm db:generate`.
+- Les services (`apps/web/lib/services`) importent `../session`, jamais `../auth` : c'est ce qui les
+  rend testables hors de Next.
 
 ## Pièges connus
 
@@ -82,5 +87,8 @@ pnpm test:rls                                    # isolation (nécessite DATABAS
   fait son travail.
 - Le cron d'alertes tourne **chaque heure** ; c'est `alertConfig.sendHour` comparé à l'heure locale
   de la pharmacie qui décide de l'envoi.
+- Une vente ne sert jamais un lot périmé (`sellableLots`) ; un ajustement « péremption » le peut.
+- Vente et achat sont idempotents par `clientRef` : la clé doit survivre à un nouvel essai côté
+  client, sinon elle ne sert à rien.
 - Ne jamais mettre en cache une réponse `/api/*` dans le service worker : une quantité périmée
   ferait vendre à découvert.

@@ -91,6 +91,8 @@ create policy tenant_isolation on public."Pharmacy"
 --
 -- puis pointer DATABASE_URL sur ce rôle.
 do $$
+declare
+  api_role text;
 begin
   if exists (select 1 from pg_roles where rolname = 'pharmaiq_app') then
     grant usage on schema public to pharmaiq_app;
@@ -104,17 +106,24 @@ begin
     raise notice 'Rôle pharmaiq_app absent — privilèges non accordés.';
   end if;
 
-  -- Supabase : rôle des utilisateurs authentifiés (accès via PostgREST).
-  if exists (select 1 from pg_roles where rolname = 'authenticated') then
-    grant usage on schema public to authenticated;
-    grant select, insert, update, delete on all tables in schema public to authenticated;
-    grant usage, select on all sequences in schema public to authenticated;
-  end if;
-
-  -- Le rôle anonyme ne doit toucher à aucune donnée métier.
-  if exists (select 1 from pg_roles where rolname = 'anon') then
-    revoke all on all tables in schema public from anon;
-  end if;
+  -- Supabase expose le schéma public via PostgREST aux rôles `authenticated` et
+  -- `anon`. La RLS isole les pharmacies entre elles, mais PAS les rôles d'une
+  -- même pharmacie : avec un accès direct, un caissier pourrait modifier son
+  -- propre "User".role ou le journal d'audit. Les permissions vivent dans les
+  -- routes Next (packages/core/permissions) ; l'application ne passe jamais par
+  -- PostgREST, donc ces rôles ne reçoivent AUCUN droit sur les tables métier.
+  foreach api_role in array array['authenticated', 'anon'] loop
+    if exists (select 1 from pg_roles where rolname = api_role) then
+      execute format('revoke all on all tables in schema public from %I', api_role);
+      execute format('revoke all on all sequences in schema public from %I', api_role);
+      -- Supabase accorde ces droits par défaut à toute table créée ensuite :
+      -- sans cette ligne, la prochaine migration rouvrirait l'accès.
+      execute format(
+        'alter default privileges in schema public revoke all on tables from %I', api_role);
+      execute format(
+        'alter default privileges in schema public revoke all on sequences from %I', api_role);
+    end if;
+  end loop;
 end
 $$;
 

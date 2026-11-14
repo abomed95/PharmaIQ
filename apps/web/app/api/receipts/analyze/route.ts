@@ -10,6 +10,7 @@ import {
 import { handleRoute, jsonError, jsonOk, parseBody } from '@/lib/http';
 import { requirePermission, toTenantContext } from '@/lib/auth';
 import { receiptAnalyzeSchema } from '@/lib/validation';
+import { consumeAiQuota } from '@/lib/services/aiQuota';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -84,6 +85,8 @@ export const POST = handleRoute(async (request: NextRequest) => {
 
   const input = await parseBody(request, receiptAnalyzeSchema);
 
+  await consumeAiQuota(user, 'receipt');
+
   let extraction;
   try {
     extraction = await extractReceipt({
@@ -115,23 +118,34 @@ export const POST = handleRoute(async (request: NextRequest) => {
 
   const lines = await withTenant(ctx, async (tx) => {
     let fallback: MatchCandidate[] | null = null;
-    const out: PreparedLine[] = [];
 
+    // 1. Rapprochement de chaque ligne avec le catalogue.
+    const matched = [];
     for (const item of extraction.receipt.items) {
       const found = await findCandidates(tx, ctx.pharmacyId, item.name, fallback);
       fallback = found.fallback;
+      matched.push({ item, match: matchProduct(item.name, found.candidates) });
+    }
 
-      const match = matchProduct(item.name, found.candidates);
+    // 2. Prix habituels, en UNE requête : une lecture par ligne coûtait un
+    //    aller-retour base par produit sur les grands reçus.
+    const matchedIds = [
+      ...new Set(matched.flatMap(({ match }) => (match.candidate ? [match.candidate.productId] : []))),
+    ];
+    const known = matchedIds.length
+      ? await tx.product.findMany({
+          where: { id: { in: matchedIds }, pharmacyId: ctx.pharmacyId },
+          select: { id: true, purchasePrice: true },
+        })
+      : [];
+    const priceById = new Map(known.map((p) => [p.id, Number(p.purchasePrice)]));
 
+    // 3. Lignes prêtes pour l'écran de vérification.
+    return matched.map(({ item, match }): PreparedLine => {
       // Prix habituel : sert à signaler un écart suspect à l'employé.
-      let knownPurchasePrice: number | null = null;
-      if (match.candidate) {
-        const product = await tx.product.findFirst({
-          where: { id: match.candidate.productId, pharmacyId: ctx.pharmacyId },
-          select: { purchasePrice: true },
-        });
-        knownPurchasePrice = product ? Number(product.purchasePrice) : null;
-      }
+      const knownPurchasePrice = match.candidate
+        ? (priceById.get(match.candidate.productId) ?? null)
+        : null;
 
       const plausibility = isPlausibleReceiptLine({
         quantity: item.quantity,
@@ -139,7 +153,7 @@ export const POST = handleRoute(async (request: NextRequest) => {
         knownPurchasePrice,
       });
 
-      out.push({
+      return {
         rawName: item.name,
         quantity: item.quantity,
         purchasePrice: item.purchase_price,
@@ -162,10 +176,8 @@ export const POST = handleRoute(async (request: NextRequest) => {
         })),
         ok: plausibility.ok,
         warning: plausibility.warning ?? null,
-      });
-    }
-
-    return out;
+      };
+    });
   });
 
   return jsonOk({

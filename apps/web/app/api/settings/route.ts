@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { NextRequest } from 'next/server';
 import { Prisma, withTenant } from '@pharmaiq/db';
-import { parseAlertConfig } from '@pharmaiq/core';
+import { isValidTimeZone, parseAlertConfig } from '@pharmaiq/core';
 import { isValidPhone } from '@pharmaiq/whatsapp';
 import { ValidationError, handleRoute, jsonOk, parseBody } from '@/lib/http';
 import { requirePermission, toTenantContext } from '@/lib/auth';
@@ -43,6 +43,11 @@ export const PATCH = handleRoute(async (request: NextRequest) => {
 
   if (input.phoneWhatsapp && !isValidPhone(input.phoneWhatsapp)) {
     throw new ValidationError(['Numéro WhatsApp invalide']);
+  }
+
+  // Un fuseau inconnu ferait partir les alertes à la mauvaise heure sans le dire.
+  if (input.timezone !== undefined && !isValidTimeZone(input.timezone)) {
+    throw new ValidationError(['Fuseau horaire inconnu (exemple : Africa/Djibouti)']);
   }
 
   const updated = await withTenant(ctx, async (tx) => {

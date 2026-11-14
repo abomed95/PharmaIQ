@@ -100,7 +100,7 @@ export function AppNav({
         </div>
       </aside>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-slate-200 bg-white md:hidden">
+      <nav className="tabbar fixed inset-x-0 bottom-0 z-20 flex border-t border-slate-200 md:hidden">
         {mobileItems.map((item) => {
           const Icon = ICONS[item.icon];
           const active = pathname.startsWith(item.href);
@@ -108,8 +108,9 @@ export function AppNav({
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? 'page' : undefined}
               className={clsx(
-                'flex flex-1 flex-col items-center gap-1 py-2 text-[11px]',
+                'flex min-h-touch flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] transition-transform active:scale-95',
                 active ? 'text-brand-700' : 'text-slate-500',
               )}
             >

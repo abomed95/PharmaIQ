@@ -4,7 +4,9 @@
   "private": true,
   "description": "PharmaIQ — SaaS multi-pharmacies de gestion de stock, ventes et intelligence commerciale.",
   "packageManager": "pnpm@9.12.3",
-  "engines": { "node": ">=20.11" },
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
@@ -13,6 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rls": "vitest run tests/tenant-isolation.test.ts",
+    "test:db": "vitest run tests/tenant-isolation.test.ts tests/services.db.test.ts",
     "db:generate": "pnpm --filter @pharmaiq/db run generate",
     "db:migrate": "pnpm --filter @pharmaiq/db run migrate",
     "db:push": "pnpm --filter @pharmaiq/db run push",
@@ -33,5 +36,11 @@
     "turbo": "^2.1.3",
     "typescript": "^5.6.3",
     "vitest": "^2.1.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.23",
+      "source-map-js": "^1.2.2"
+    }
   }
 }

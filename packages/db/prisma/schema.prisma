@@ -348,6 +348,8 @@ model Purchase {
   branchId   String?   @db.Uuid
 
   invoiceRef String?
+  /// Clé d'idempotence fournie par le client (anti double entrée en stock).
+  clientRef  String?
   total      Decimal        @default(0) @db.Decimal(12, 2)
   date       DateTime       @default(now())
   status     PurchaseStatus @default(draft)
@@ -366,6 +368,7 @@ model Purchase {
 
   items PurchaseItem[]
 
+  @@unique([pharmacyId, clientRef])
   @@index([pharmacyId, date])
   @@index([pharmacyId, status])
 }

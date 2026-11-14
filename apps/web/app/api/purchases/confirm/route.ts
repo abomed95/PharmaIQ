@@ -15,5 +15,5 @@ export const POST = handleRoute(async (request: NextRequest) => {
   const user = await requirePermission('purchases.manage');
   const input = await parseBody(request, purchaseConfirmSchema);
   const result = await confirmPurchase(user, input);
-  return jsonOk(result, { status: 201 });
+  return jsonOk(result, { status: result.replayed ? 200 : 201 });
 });

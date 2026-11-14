@@ -9,10 +9,12 @@ import { Badge, EmptyState, PageHeader } from '@/components/ui';
 export const dynamic = 'force-dynamic';
 
 export default async function ProductsPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
-  searchParams: { q?: string; page?: string };
+  searchParams: Promise<{ q?: string; page?: string }>;
 }) {
+  // Depuis Next 15, les paramètres d'URL arrivent sous forme de promesse.
+  const searchParams = await searchParamsPromise;
   const user = await requirePermission('products.view');
   const dict = getDictionary(user.locale);
   const ctx = toTenantContext(user);

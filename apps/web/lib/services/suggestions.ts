@@ -2,6 +2,7 @@ import { Prisma, withTenant } from '@pharmaiq/db';
 import {
   buildSuggestions,
   groupBySupplier,
+  logger,
   periodKey,
   round2,
   type Suggestion,
@@ -9,7 +10,8 @@ import {
 } from '@pharmaiq/core';
 import { explainPurchaseAdvice, isAiConfigured, type Advice } from '@pharmaiq/ai';
 import { getDashboard, getProductStats } from '../analytics';
-import { toTenantContext, type SessionUser } from '../auth';
+import { toTenantContext, type SessionUser } from '../session';
+import { consumeAiQuota } from './aiQuota';
 
 /**
  * Conseils d'achat (§6.3).
@@ -77,6 +79,8 @@ export async function computeSuggestions(
       byType.dead_stock.reduce((sum, s) => sum + (s.payload.capitalTied ?? 0), 0),
     );
     try {
+      // Plafond dépassé : l'écran reste complet, seule l'explication manque.
+      await consumeAiQuota(user, 'advice');
       advice = await explainPurchaseAdvice({
         pharmacyName: user.pharmacyName,
         currency: user.currency,
@@ -108,7 +112,7 @@ export async function computeSuggestions(
         })),
       });
     } catch (error) {
-      console.error('[suggestions] explication IA indisponible', error);
+      logger.error('suggestions : explication IA indisponible', { pharmacyId: user.pharmacyId, error });
     }
   }
 
