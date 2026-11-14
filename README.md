@@ -99,6 +99,7 @@ pharmaiq/
 │   ├── ai/                    appels Claude (vision, conseils, assistant)
 │   └── whatsapp/              client Meta Cloud API
 ├── scripts/import-catalog.ts  import Excel/CSV → produits + stock
+├── deploy/gcp/                déploiement Google Cloud scripté (simulation par défaut, voir DEPLOY.md)
 ├── tests/                     vitest (dont l'isolation multi-tenant)
 └── data/seed/                 catalogue d'amorçage
 ```
@@ -127,7 +128,7 @@ dans le calcul — elle explique, elle ne décide pas.
 
 ## Alertes WhatsApp
 
-Le cron Vercel appelle `/api/alerts/run` **chaque heure** ; chaque pharmacie n'est traitée que si
+Le cron (Vercel, ou Cloud Scheduler sur Google Cloud) appelle `/api/alerts/run` **chaque heure** ; chaque pharmacie n'est traitée que si
 l'heure locale correspond à son `alertConfig.sendHour` (les pharmacies peuvent être dans des fuseaux
 différents). Un envoi par jour maximum, un seul message récapitulatif, journalisé dans `Alert`.
 
