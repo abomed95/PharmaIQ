@@ -27,24 +27,32 @@ export function RevenueChart({ data, currency }: { data: SeriesPoint[]; currency
   }
 
   return (
+    <div className="w-full">
+      <div className="mb-2 flex gap-4 text-xs text-slate-600" aria-hidden>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded" style={{ background: 'var(--chart-revenue)' }} />Ventes</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded" style={{ background: 'var(--chart-profit)' }} />Bénéfice</span>
+      </div>
     <div className="h-56 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
           <defs>
             <linearGradient id="revenue" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+              <stop offset="5%" stopColor="var(--chart-revenue)" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="var(--chart-revenue)" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+          <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
           <XAxis
             dataKey="day"
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: 'var(--chart-axis)' }}
             tickFormatter={(value: string) => value.slice(5)}
-            stroke="#94a3b8"
+            stroke="var(--chart-grid)"
+            tickLine={false}
           />
-          <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={56} />
+          <YAxis tick={{ fontSize: 11, fill: 'var(--chart-axis)' }} axisLine={false} tickLine={false} width={56} />
           <Tooltip
+            contentStyle={{ background: 'var(--chart-tooltip-bg)', color: 'var(--chart-tooltip-text)', border: '1px solid var(--chart-grid)', borderRadius: 10, fontSize: 12 }}
+            labelStyle={{ color: 'var(--chart-tooltip-text)', fontWeight: 600 }}
             // Types laissés à l'inférence : recharts attend des signatures larges.
             formatter={(value, name) => [
               `${Math.round(Number(value))} ${currency}`,
@@ -55,19 +63,20 @@ export function RevenueChart({ data, currency }: { data: SeriesPoint[]; currency
           <Area
             type="monotone"
             dataKey="revenue"
-            stroke="#059669"
+            stroke="var(--chart-revenue)"
             strokeWidth={2}
             fill="url(#revenue)"
           />
           <Area
             type="monotone"
             dataKey="profit"
-            stroke="#0ea5e9"
+            stroke="var(--chart-profit)"
             strokeWidth={2}
             fillOpacity={0}
           />
         </AreaChart>
       </ResponsiveContainer>
+    </div>
     </div>
   );
 }
